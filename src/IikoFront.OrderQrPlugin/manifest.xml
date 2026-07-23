@@ -1,0 +1,7 @@
+<?xml version="1.0" encoding="utf-8"?>
+<Manifest xmlns:xsi="http://www.w3.org/2001/XMLSchema-instance" xsi:schemaLocation="http://www.w3.org/2001/XMLSchema ./Binaries/Manifest.xsd">
+  <FileName>IikoFront.OrderQrPlugin.dll</FileName>
+  <TypeName>IikoFront.OrderQrPlugin.Plugin</TypeName>
+  <ApiVersion>V9Preview7</ApiVersion>
+  <LicenseModuleId>0</LicenseModuleId>
+</Manifest>

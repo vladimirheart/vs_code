@@ -17,5 +17,6 @@
 
   <ItemGroup>
     <None Include="order-qr-settings.json" CopyToOutputDirectory="PreserveNewest" />
+    <None Include="manifest.xml" CopyToOutputDirectory="PreserveNewest" />
   </ItemGroup>
 </Project>
