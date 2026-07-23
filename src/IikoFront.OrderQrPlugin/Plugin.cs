@@ -11,7 +11,8 @@ namespace IikoFront.OrderQrPlugin
 {
     public sealed class Plugin : IFrontPlugin
     {
-        private readonly IDisposable subscription;
+        private readonly IDisposable billSubscription;
+        private readonly IDisposable cookingStartSubscription;
         private readonly PrintAttemptLogger attemptLogger;
 
         public Plugin()
@@ -47,11 +48,16 @@ namespace IikoFront.OrderQrPlugin
                     payloadBuilder,
                     qrMarkupFactory,
                     attemptLogger);
+                var cookingStartAutoPrintCoordinator = new CookingStartAutoPrintCoordinator(
+                    PluginContext.Operations,
+                    settings,
+                    PluginContext.Log);
 
-                subscription = PluginContext.Notifications.BillChequePrinting.Subscribe(extender.OnBillChequePrinting);
+                billSubscription = PluginContext.Notifications.BillChequePrinting.Subscribe(extender.OnBillChequePrinting);
+                cookingStartSubscription = cookingStartAutoPrintCoordinator.Subscribe(PluginContext.Notifications);
 
                 PluginContext.Log.Info(
-                    $"event=PLUGIN_STARTED pluginVersion={pluginVersion} iikoVersion={pluginVersionOrDash(iikoVersion)} subscribed=true");
+                    $"event=PLUGIN_STARTED pluginVersion={pluginVersion} iikoVersion={pluginVersionOrDash(iikoVersion)} billSubscription=true cookingStartSubscription=true");
             }
             catch (Exception ex)
             {
@@ -63,7 +69,8 @@ namespace IikoFront.OrderQrPlugin
         {
             try
             {
-                subscription?.Dispose();
+                billSubscription?.Dispose();
+                cookingStartSubscription?.Dispose();
                 attemptLogger?.FlushNotice();
                 PluginContext.Log.Info("event=PLUGIN_STOPPED");
             }

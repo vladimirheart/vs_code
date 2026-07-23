@@ -11,5 +11,8 @@
   "includeOrderGuidInPayload": false,
   "includeModifiers": true,
   "includeAllergens": true,
-  "includePrintTime": true
+  "includePrintTime": true,
+  "printOnCookingStart": true,
+  "printDeliveryBillOnCookingStart": true,
+  "printTableBillOnCookingStart": true
 }

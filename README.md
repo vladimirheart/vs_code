@@ -1,6 +1,6 @@
 # IikoFront.OrderQrPlugin
 
-Плагин для `iikoFront 9.4.6`, который подписывается на `BillChequePrinting`, собирает payload по заказу и добавляет QR-код в нижнюю часть гостевого счёта.
+Плагин для `iikoFront 9.4.6`, который подписывается на `BillChequePrinting`, собирает payload по заказу и добавляет QR-код в нижнюю часть гостевого счёта. Дополнительно плагин может сам инициировать печать счета в момент начала приготовления.
 
 ## Поддерживаемые версии
 
@@ -13,11 +13,13 @@
 ## Что делает плагин
 
 - Загружает актуальный заказ через `PluginContext.Operations.GetOrderById(orderId)`.
+- Подписывается на `GetKitchenOrderChanged(false)` и реагирует на `CookingStarted`.
 - Включает в payload только неудалённые корневые позиции.
 - Поддерживает `IOrderProductItem`, модификаторы и базовую обработку `IOrderCompoundItem`.
 - Печатает отсутствующие значения как ASCII-символ `-`.
 - Не блокирует печать гостевого счёта при любой ошибке.
 - Пишет стандартный лог и JSONL-аудит попыток.
+- Для доставки вызывает `PrintDeliveryBill(...)`, для заказа от стола вызывает `PrintBillCheque(...)`.
 
 ## Структура решения
 
@@ -71,9 +73,16 @@ MSBuild.exe IikoFront.OrderQrPlugin.sln /restore /p:Configuration=Release
   "includeOrderGuidInPayload": false,
   "includeModifiers": true,
   "includeAllergens": true,
-  "includePrintTime": true
+  "includePrintTime": true,
+  "printOnCookingStart": true,
+  "printDeliveryBillOnCookingStart": true,
+  "printTableBillOnCookingStart": true
 }
 ```
+
+- `"printOnCookingStart": true` — включить автопечать на старте готовки.
+- `"printDeliveryBillOnCookingStart": true` — печатать доставочный документ при `CookingStarted`.
+- `"printTableBillOnCookingStart": true` — печатать гостевой счет заказа от стола при `CookingStarted`.
 
 Если файла нет, плагин создаёт его со значениями по умолчанию. Если JSON повреждён, плагин пишет ошибку в стандартный лог и использует безопасные дефолты.
 

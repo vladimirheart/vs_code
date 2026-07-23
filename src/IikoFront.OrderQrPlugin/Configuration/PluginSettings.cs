@@ -44,6 +44,15 @@ namespace IikoFront.OrderQrPlugin.Configuration
         [DataMember(Name = "includePrintTime")]
         public bool IncludePrintTime { get; set; } = true;
 
+        [DataMember(Name = "printOnCookingStart")]
+        public bool PrintOnCookingStart { get; set; } = true;
+
+        [DataMember(Name = "printDeliveryBillOnCookingStart")]
+        public bool PrintDeliveryBillOnCookingStart { get; set; } = true;
+
+        [DataMember(Name = "printTableBillOnCookingStart")]
+        public bool PrintTableBillOnCookingStart { get; set; } = true;
+
         public static PluginSettings CreateDefault()
         {
             return new PluginSettings();
