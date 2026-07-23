@@ -1,0 +1,15 @@
+{
+  "enabled": true,
+  "printOnGuestBill": true,
+  "payloadVersion": "IIKOQR1",
+  "qrSize": "Extralarge",
+  "qrCorrection": "Low",
+  "treatAllZeroFoodValueAsMissing": true,
+  "maxPayloadUtf8BytesWarning": 2500,
+  "writeFullPayloadToStandardLog": false,
+  "writeJsonlAuditLog": true,
+  "includeOrderGuidInPayload": false,
+  "includeModifiers": true,
+  "includeAllergens": true,
+  "includePrintTime": true
+}

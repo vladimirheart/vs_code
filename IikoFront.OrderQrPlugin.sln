@@ -1,0 +1,27 @@
+Microsoft Visual Studio Solution File, Format Version 12.00
+# Visual Studio Version 17
+VisualStudioVersion = 17.0.31903.59
+MinimumVisualStudioVersion = 10.0.40219.1
+Project("{FAE04EC0-301F-11D3-BF4B-00C04F79EFBC}") = "IikoFront.OrderQrPlugin", "src\IikoFront.OrderQrPlugin\IikoFront.OrderQrPlugin.csproj", "{A7DB04D2-72C2-4EA1-9181-5C239F2A2CA7}"
+EndProject
+Project("{FAE04EC0-301F-11D3-BF4B-00C04F79EFBC}") = "IikoFront.OrderQrPlugin.Tests", "tests\IikoFront.OrderQrPlugin.Tests\IikoFront.OrderQrPlugin.Tests.csproj", "{B7D2F4B4-74EF-46D3-8A8F-0C5A4EBCB27F}"
+EndProject
+Global
+	GlobalSection(SolutionConfigurationPlatforms) = preSolution
+		Debug|Any CPU = Debug|Any CPU
+		Release|Any CPU = Release|Any CPU
+	EndGlobalSection
+	GlobalSection(ProjectConfigurationPlatforms) = postSolution
+		{A7DB04D2-72C2-4EA1-9181-5C239F2A2CA7}.Debug|Any CPU.ActiveCfg = Debug|Any CPU
+		{A7DB04D2-72C2-4EA1-9181-5C239F2A2CA7}.Debug|Any CPU.Build.0 = Debug|Any CPU
+		{A7DB04D2-72C2-4EA1-9181-5C239F2A2CA7}.Release|Any CPU.ActiveCfg = Release|Any CPU
+		{A7DB04D2-72C2-4EA1-9181-5C239F2A2CA7}.Release|Any CPU.Build.0 = Release|Any CPU
+		{B7D2F4B4-74EF-46D3-8A8F-0C5A4EBCB27F}.Debug|Any CPU.ActiveCfg = Debug|Any CPU
+		{B7D2F4B4-74EF-46D3-8A8F-0C5A4EBCB27F}.Debug|Any CPU.Build.0 = Debug|Any CPU
+		{B7D2F4B4-74EF-46D3-8A8F-0C5A4EBCB27F}.Release|Any CPU.ActiveCfg = Release|Any CPU
+		{B7D2F4B4-74EF-46D3-8A8F-0C5A4EBCB27F}.Release|Any CPU.Build.0 = Release|Any CPU
+	EndGlobalSection
+	GlobalSection(SolutionProperties) = preSolution
+		HideSolutionNode = FALSE
+	EndGlobalSection
+EndGlobal
