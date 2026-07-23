@@ -10,7 +10,7 @@ using Resto.Front.Api.Attributes;
 
 namespace IikoFront.OrderQrPlugin
 {
-    [PluginLicenseModuleId(0)]
+    [PluginLicenseModuleId(21016318)]
     public sealed class Plugin : IFrontPlugin
     {
         private readonly IDisposable billSubscription;

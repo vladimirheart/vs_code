@@ -50,18 +50,16 @@ MSBuild.exe IikoFront.OrderQrPlugin.sln /restore /p:Configuration=Release
 
 ## LicenseModuleId
 
-В репозитории и release-пакете сейчас установлен placeholder:
+В репозитории и release-пакете сейчас установлен:
 
 ```text
-LicenseModuleId = 0
+LicenseModuleId = 21016318
 ```
 
-Перед реальной установкой его нужно заменить на ваш зарегистрированный `ModuleId` в двух местах:
+Он указан в двух местах:
 
 - [Plugin.cs](/C:/Users/SinicinVV/git_h/vs_code/src/IikoFront.OrderQrPlugin/Plugin.cs:1) — атрибут `PluginLicenseModuleId(...)`
 - [manifest.xml](/C:/Users/SinicinVV/git_h/vs_code/src/IikoFront.OrderQrPlugin/manifest.xml:1) — тег `<LicenseModuleId>`
-
-Использовать чужой `ModuleId` нельзя: это приводит к конфликтам лицензирования и загрузки плагинов.
 
 ## Включение и отключение
 
