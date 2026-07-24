@@ -1,0 +1,10 @@
+﻿using System.Reflection;
+[assembly: AssemblyTitle("IikoFront.OrderQrPlugin")]
+[assembly: AssemblyDescription("IikoFront.OrderQrPlugin")]
+[assembly: AssemblyCompany("")]
+[assembly: AssemblyProduct("IikoFront.OrderQrPlugin")]
+[assembly: AssemblyCopyright("")]
+[assembly: AssemblyTrademark("")]
+[assembly: AssemblyVersion("1.0.0.0")]
+[assembly: AssemblyFileVersion("1.0.0.0")]
+[assembly: AssemblyInformationalVersion("1.0.0")]

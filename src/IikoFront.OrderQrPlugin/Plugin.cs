@@ -15,6 +15,7 @@ namespace IikoFront.OrderQrPlugin
     {
         private readonly IDisposable billSubscription;
         private readonly IDisposable cookingStartSubscription;
+        private readonly IDisposable tableManualPrintSubscription;
         private readonly PrintAttemptLogger attemptLogger;
 
         public Plugin()
@@ -57,9 +58,14 @@ namespace IikoFront.OrderQrPlugin
 
                 billSubscription = PluginContext.Notifications.BillChequePrinting.Subscribe(extender.OnBillChequePrinting);
                 cookingStartSubscription = cookingStartAutoPrintCoordinator.Subscribe(PluginContext.Notifications);
+                if (settings.Enabled && settings.PrintTableBillOnCookingStart)
+                {
+                    var tableOrderManualPrintButton = new TableOrderManualPrintButton(PluginContext.Log);
+                    tableManualPrintSubscription = tableOrderManualPrintButton.Subscribe(PluginContext.Operations);
+                }
 
                 PluginContext.Log.Info(
-                    $"event=PLUGIN_STARTED pluginVersion={pluginVersion} iikoVersion={pluginVersionOrDash(iikoVersion)} billSubscription=true cookingStartSubscription=true");
+                    $"event=PLUGIN_STARTED pluginVersion={pluginVersion} iikoVersion={pluginVersionOrDash(iikoVersion)} billSubscription=true cookingStartSubscription=true tableManualPrintSubscription={(tableManualPrintSubscription != null).ToString().ToLowerInvariant()}");
             }
             catch (Exception ex)
             {
@@ -73,6 +79,7 @@ namespace IikoFront.OrderQrPlugin
             {
                 billSubscription?.Dispose();
                 cookingStartSubscription?.Dispose();
+                tableManualPrintSubscription?.Dispose();
                 attemptLogger?.FlushNotice();
                 PluginContext.Log.Info("event=PLUGIN_STOPPED");
             }

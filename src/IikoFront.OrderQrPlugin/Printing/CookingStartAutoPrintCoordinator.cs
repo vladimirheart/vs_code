@@ -7,7 +7,6 @@ using Resto.Front.Api;
 using Resto.Front.Api.Data.Common;
 using Resto.Front.Api.Data.Kitchen;
 using Resto.Front.Api.Data.Orders;
-using Resto.Front.Api.Data.Print;
 using Resto.Front.Api.Exceptions;
 
 namespace IikoFront.OrderQrPlugin.Printing
@@ -15,7 +14,6 @@ namespace IikoFront.OrderQrPlugin.Printing
     public sealed class CookingStartAutoPrintCoordinator
     {
         private const string ExternalDataKey = "IikoFront.OrderQrPlugin.CookingStartPrinted";
-        private const int TableRetryDelayUpperBoundMs = 250;
 
         private readonly IOperationService operations;
         private readonly PluginSettings settings;
@@ -55,7 +53,7 @@ namespace IikoFront.OrderQrPlugin.Printing
                 return;
             }
 
-            if (isAlreadyPrinted(kitchenOrder))
+            if (IsAlreadyPrinted(kitchenOrder))
             {
                 return;
             }
@@ -74,10 +72,10 @@ namespace IikoFront.OrderQrPlugin.Printing
                     settings.CookingStartRetryDelayMs,
                     settings.CookingStartMaxAttempts));
 
-            Task.Run(() => ProcessCookingStartPrintAsync(kitchenOrder.BaseOrderId));
+            Task.Run(() => ProcessCookingStartPrintAsync(kitchenOrderId));
         }
 
-        private bool isAlreadyPrinted(IKitchenOrder kitchenOrder)
+        private bool IsAlreadyPrinted(IKitchenOrder kitchenOrder)
         {
             if (inFlightOrPrinted.ContainsKey(kitchenOrder.BaseOrderId))
             {
@@ -91,14 +89,12 @@ namespace IikoFront.OrderQrPlugin.Printing
         {
             try
             {
-                var retryPlan = resolveRetryPlan(orderId);
-
                 if (settings.CookingStartInitialDelayMs > 0)
                 {
                     await Task.Delay(settings.CookingStartInitialDelayMs).ConfigureAwait(false);
                 }
 
-                for (var attempt = 1; attempt <= retryPlan.MaxAttempts; attempt++)
+                for (var attempt = 1; attempt <= settings.CookingStartMaxAttempts; attempt++)
                 {
                     log.Info(
                         string.Format(
@@ -106,8 +102,8 @@ namespace IikoFront.OrderQrPlugin.Printing
                             "event=COOKING_START_PRINT_ATTEMPT orderId={0} attempt={1} maxAttempts={2} retryDelayMs={3}",
                             orderId,
                             attempt,
-                            retryPlan.MaxAttempts,
-                            retryPlan.RetryDelayMs));
+                            settings.CookingStartMaxAttempts,
+                            settings.CookingStartRetryDelayMs));
 
                     try
                     {
@@ -119,7 +115,7 @@ namespace IikoFront.OrderQrPlugin.Printing
                         inFlightOrPrinted.TryRemove(orderId, out _);
                         return;
                     }
-                    catch (EntityAlreadyInUseException ex) when (attempt < retryPlan.MaxAttempts)
+                    catch (EntityAlreadyInUseException ex) when (attempt < settings.CookingStartMaxAttempts)
                     {
                         log.Warn(
                             string.Format(
@@ -127,10 +123,10 @@ namespace IikoFront.OrderQrPlugin.Printing
                                 "event=COOKING_START_PRINT_RETRY orderId={0} attempt={1} delayMs={2} reason=ENTITY_ALREADY_IN_USE lockedTerminal={3} lockedUser={4}",
                                 orderId,
                                 attempt,
-                                retryPlan.RetryDelayMs,
-                                normalizeLogValue(ex.LockedTerminalName),
-                                normalizeLogValue(ex.LockedUser?.Code)));
-                        await Task.Delay(retryPlan.RetryDelayMs).ConfigureAwait(false);
+                                settings.CookingStartRetryDelayMs,
+                                NormalizeLogValue(ex.LockedTerminalName),
+                                NormalizeLogValue(ex.LockedUser?.Code)));
+                        await Task.Delay(settings.CookingStartRetryDelayMs).ConfigureAwait(false);
                     }
                     catch (Exception ex)
                     {
@@ -151,8 +147,8 @@ namespace IikoFront.OrderQrPlugin.Printing
                         CultureInfo.InvariantCulture,
                         "event=COOKING_START_PRINT_FAILED orderId={0} reason=ENTITY_ALREADY_IN_USE_RETRY_LIMIT maxAttempts={1} retryDelayMs={2}",
                         orderId,
-                        retryPlan.MaxAttempts,
-                        retryPlan.RetryDelayMs));
+                        settings.CookingStartMaxAttempts,
+                        settings.CookingStartRetryDelayMs));
             }
             catch (Exception ex)
             {
@@ -200,7 +196,7 @@ namespace IikoFront.OrderQrPlugin.Printing
                         order.Number));
 
                 operations.PrintDeliveryBill(deliveryOrder, operations.GetDefaultCredentials());
-                markAsPrinted(order, "DELIVERY");
+                MarkAsPrinted(order, "DELIVERY");
 
                 log.Info(
                     string.Format(
@@ -222,65 +218,16 @@ namespace IikoFront.OrderQrPlugin.Printing
                 return false;
             }
 
-            if (order.Status == OrderStatus.Closed)
-            {
-                log.Info(
-                    string.Format(
-                        CultureInfo.InvariantCulture,
-                        "event=COOKING_START_PRINT_SKIPPED reason=ORDER_CLOSED orderId={0} orderNumber={1} status={2}",
-                        order.Id,
-                        order.Number,
-                        order.Status));
-                return false;
-            }
-
-            if (order.Status == OrderStatus.Deleted)
-            {
-                log.Info(
-                    string.Format(
-                        CultureInfo.InvariantCulture,
-                        "event=COOKING_START_PRINT_SKIPPED reason=ORDER_DELETED orderId={0} orderNumber={1} status={2}",
-                        order.Id,
-                        order.Number,
-                        order.Status));
-                return false;
-            }
-
             log.Info(
                 string.Format(
                     CultureInfo.InvariantCulture,
-                    "event=COOKING_START_PRINT_STARTED mode=TABLE orderId={0} orderNumber={1}",
+                    "event=COOKING_START_PRINT_SKIPPED reason=TABLE_MANUAL_BUTTON mode=TABLE orderId={0} orderNumber={1}",
                     order.Id,
                     order.Number));
-
-            try
-            {
-                operations.PrintBillCheque(order, operations.GetDefaultCredentials(), PrinterSelectionMode.Default);
-            }
-            catch (ConstraintViolationException ex) when (isClosedOrderViolation(order, ex))
-            {
-                log.Info(
-                    string.Format(
-                        CultureInfo.InvariantCulture,
-                        "event=COOKING_START_PRINT_SKIPPED reason=ORDER_CLOSED orderId={0} orderNumber={1} status={2}",
-                        order.Id,
-                        order.Number,
-                        order.Status));
-                return false;
-            }
-
-            markAsPrinted(order, "TABLE");
-
-            log.Info(
-                string.Format(
-                    CultureInfo.InvariantCulture,
-                    "event=COOKING_START_PRINT_REQUESTED mode=TABLE orderId={0} orderNumber={1}",
-                    order.Id,
-                    order.Number));
-            return true;
+            return false;
         }
 
-        private void markAsPrinted(IOrder order, string mode)
+        private void MarkAsPrinted(IOrder order, string mode)
         {
             var value = string.Format(
                 CultureInfo.InvariantCulture,
@@ -308,62 +255,13 @@ namespace IikoFront.OrderQrPlugin.Printing
                         order.Id,
                         mode,
                         ex.GetType().Name,
-                        normalizeLogValue(ex.Message)));
+                        NormalizeLogValue(ex.Message)));
             }
         }
 
-        private static string normalizeLogValue(string value)
+        private static string NormalizeLogValue(string value)
         {
             return string.IsNullOrWhiteSpace(value) ? "-" : value.Replace(' ', '_');
-        }
-
-        private static bool isClosedOrderViolation(IOrder order, ConstraintViolationException exception)
-        {
-            if (order.Status == OrderStatus.Closed || order.Status == OrderStatus.Deleted)
-            {
-                return true;
-            }
-
-            var message = exception?.Message;
-            return !string.IsNullOrWhiteSpace(message)
-                && (message.IndexOf("Closed", StringComparison.OrdinalIgnoreCase) >= 0
-                    || message.IndexOf("закрыт", StringComparison.OrdinalIgnoreCase) >= 0);
-        }
-
-        private RetryPlan resolveRetryPlan(Guid orderId)
-        {
-            var order = operations.GetOrderById(orderId);
-            if (order is IDeliveryOrder)
-            {
-                return new RetryPlan(settings.CookingStartRetryDelayMs, settings.CookingStartMaxAttempts);
-            }
-
-            var retryDelayMs = Math.Min(settings.CookingStartRetryDelayMs, TableRetryDelayUpperBoundMs);
-            retryDelayMs = Math.Max(retryDelayMs, 1);
-
-            if (retryDelayMs >= settings.CookingStartRetryDelayMs)
-            {
-                return new RetryPlan(settings.CookingStartRetryDelayMs, settings.CookingStartMaxAttempts);
-            }
-
-            var originalRetryBudgetMs = Math.Max(settings.CookingStartMaxAttempts - 1, 0) * settings.CookingStartRetryDelayMs;
-            var scaledAttempts = (originalRetryBudgetMs / retryDelayMs) + 1;
-            var maxAttempts = Math.Max(settings.CookingStartMaxAttempts, scaledAttempts);
-
-            return new RetryPlan(retryDelayMs, maxAttempts);
-        }
-
-        private sealed class RetryPlan
-        {
-            public RetryPlan(int retryDelayMs, int maxAttempts)
-            {
-                RetryDelayMs = retryDelayMs;
-                MaxAttempts = maxAttempts;
-            }
-
-            public int RetryDelayMs { get; }
-
-            public int MaxAttempts { get; }
         }
 
         private sealed class ActionObserver<T> : IObserver<T>
