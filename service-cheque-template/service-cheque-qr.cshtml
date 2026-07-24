@@ -1,32 +1,178 @@
 @using System
 @using System.Linq
+@using System.Text
+@using System.Collections
 @using System.Collections.Generic
-@*
-  Черновик шаблона сервисного чека iiko.
+@using System.Globalization
+@using System.Reflection
+@functions {
+    private static object GetPropertyValue(object source, params string[] names)
+    {
+        if (source == null || names == null)
+        {
+            return null;
+        }
 
-  Важно:
-  1. Это отдельная заготовка под сервисный чек.
-  2. Имена Model.Order / Model.Items / item.Name / item.Amount нужно сверить с TemplateModels.xml вашей версии iiko.
-  3. Поля КБЖУ, аллергены и модификаторы здесь помечены как TODO, потому что доступность этих свойств зависит от модели печати.
-*@
+        var type = source.GetType();
+        foreach (var name in names)
+        {
+            var property = type.GetProperty(name, BindingFlags.Instance | BindingFlags.Public | BindingFlags.IgnoreCase);
+            if (property == null)
+            {
+                continue;
+            }
+
+            try
+            {
+                return property.GetValue(source, null);
+            }
+            catch
+            {
+                return null;
+            }
+        }
+
+        return null;
+    }
+
+    private static IEnumerable<object> AsObjects(object value)
+    {
+        if (value == null || value is string)
+        {
+            yield break;
+        }
+
+        var enumerable = value as IEnumerable;
+        if (enumerable == null)
+        {
+            yield break;
+        }
+
+        foreach (var item in enumerable)
+        {
+            if (item != null)
+            {
+                yield return item;
+            }
+        }
+    }
+
+    private static string ToText(object value, string fallback)
+    {
+        if (value == null)
+        {
+            return fallback;
+        }
+
+        var text = Convert.ToString(value, CultureInfo.InvariantCulture);
+        return string.IsNullOrWhiteSpace(text) ? fallback : text.Trim();
+    }
+
+    private static string ToCompactNumber(object value, string fallback)
+    {
+        if (value == null)
+        {
+            return fallback;
+        }
+
+        decimal decimalValue;
+        if (decimal.TryParse(Convert.ToString(value, CultureInfo.InvariantCulture), NumberStyles.Any, CultureInfo.InvariantCulture, out decimalValue))
+        {
+            return decimalValue.ToString("0.###", CultureInfo.InvariantCulture);
+        }
+
+        return ToText(value, fallback);
+    }
+
+    private static string JoinNames(IEnumerable<object> source)
+    {
+        var values = new List<string>();
+        foreach (var item in source)
+        {
+            var name = ToText(
+                GetPropertyValue(item, "Name", "DisplayName", "Title", "FullName"),
+                string.Empty);
+
+            if (!string.IsNullOrWhiteSpace(name))
+            {
+                values.Add(name);
+            }
+        }
+
+        return values.Count == 0 ? "-" : string.Join(", ", values.Distinct());
+    }
+
+    private static string FormatFoodValue(object item, params string[] propertyNames)
+    {
+        var value = GetPropertyValue(item, propertyNames);
+        return ToCompactNumber(value, "-");
+    }
+
+    private static string BuildPayload(object order)
+    {
+        var orderNumber = ToText(GetPropertyValue(order, "Number", "OrderNumber"), "-");
+        var items = AsObjects(GetPropertyValue(order, "Items", "OrderItems", "Products", "ProductItems")).ToList();
+        var builder = new StringBuilder();
+
+        builder.Append("ЗАК:")
+            .Append(orderNumber)
+            .Append("; Д.:")
+            .Append(DateTime.Now.ToString("yyyy-MM-ddTHH:mm:ss", CultureInfo.InvariantCulture))
+            .Append("; ПОЗ.:")
+            .Append(items.Count);
+
+        for (var index = 0; index < items.Count; index++)
+        {
+            var item = items[index];
+            var itemName = ToText(GetPropertyValue(item, "Name", "ProductName", "DishName", "Title"), "-");
+            var quantity = ToCompactNumber(GetPropertyValue(item, "Amount", "Quantity", "Count"), "-");
+            var size = ToText(GetPropertyValue(item, "Size", "SizeName", "PortionSize"), string.Empty);
+            var allergens = JoinNames(AsObjects(GetPropertyValue(item, "Allergens", "AllergenGroups")));
+            var modifiers = JoinNames(AsObjects(GetPropertyValue(item, "Modifiers", "ChildModifiers", "OrderModifiers")));
+
+            builder.AppendLine()
+                .Append(index + 1)
+                .Append(";")
+                .Append(itemName);
+
+            builder.AppendLine()
+                .Append("КОЛ:")
+                .Append(quantity);
+
+            if (!string.IsNullOrWhiteSpace(size) && size != "-")
+            {
+                builder.Append("; РАЗМЕР:")
+                    .Append(size);
+            }
+
+            builder.AppendLine()
+                .Append("ККАЛ:")
+                .Append(FormatFoodValue(item, "Calories", "Kkal", "KCal", "EnergyKcal"))
+                .Append("; Б:")
+                .Append(FormatFoodValue(item, "Proteins", "Protein"))
+                .Append("; Ж:")
+                .Append(FormatFoodValue(item, "Fats", "Fat"))
+                .Append("; У:")
+                .Append(FormatFoodValue(item, "Carbohydrates", "Carbs"));
+
+            builder.AppendLine()
+                .Append("АЛГ:")
+                .Append(allergens);
+
+            if (modifiers != "-")
+            {
+                builder.AppendLine()
+                    .Append("МОД.:")
+                    .Append(modifiers);
+            }
+        }
+
+        return builder.ToString();
+    }
+}
 @{
-    var order = Model;
-    var rawItems = (IEnumerable<dynamic>)(Model.Items ?? Enumerable.Empty<dynamic>());
-    var items = rawItems.Where(item => item != null).ToList();
-    var printTime = DateTime.Now.ToString("yyyy-MM-ddTHH:mm:ss");
-    var lineNumber = 0;
+    var payload = BuildPayload(Model);
 }
-ЗАК:@(order.Number); Д.:@(printTime); ПОЗ.:@(items.Count)
-@foreach (var item in items)
-{
-    lineNumber++;
-<text>
-@(lineNumber);@(item.Name)
-КОЛ:@(item.Amount)@if (item.Size != null) {<text>; РАЗМЕР:@(item.Size)</text>}
-ККАЛ:@("-"); Б:@("-"); Ж:@("-"); У:@("-")
-АЛГ:@("-")
-</text>
-    @* TODO: если в модели доступны модификаторы, печатать строку:
-       МОД.:modifier1|modifier2
-    *@
-}
+<doc>
+  <qrcode>@payload</qrcode>
+</doc>

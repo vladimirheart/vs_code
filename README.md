@@ -1,14 +1,14 @@
 # IikoFront.OrderQrPlugin
 
-Плагин для `iikoFront 9.4.6`, который подписывается на `BillChequePrinting`, собирает payload по заказу и добавляет QR-код в нижнюю часть гостевого счёта. Дополнительно плагин может сам инициировать печать счета в момент начала приготовления.
+Репозиторий для QR-печати по заказу в `iikoFront/iikoOffice`. Сейчас проект ориентирован на установленную у вас версию `iiko 9.5.8`: исходный плагин переведён на `Front API V9`, а рядом хранится отдельный Razor-шаблон для сценария через `сервисный чек`.
 
 ## Поддерживаемые версии
 
-- `iikoFront`: `9.4.6`
-- `Front API`: `Resto.Front.Api.V9Preview7`
-- Версия пакета: `9.4.6046-alpha`
+- `iikoFront`: `9.5.8`
+- `Front API`: `Resto.Front.Api.V9`
+- Версия пакета: `9.5.6059`
 
-Связка версий выбрана под установленный `iikoFront 9.4.6`: для линейки `iikoRMS 9.4` официальный API-контракт находится в ветке `V9Preview7`.
+Связка версий выбрана под установленный `iikoFront 9.5.8`: начиная с линейки `9.5` в changelog Front API объявлена основная LTS-ветка `V9`, а preview-ветки `V9Preview*` для этого сценария больше не нужны.
 
 ## Что делает плагин
 
@@ -20,13 +20,13 @@
 - Не блокирует печать гостевого счёта при любой ошибке.
 - Пишет стандартный лог и JSONL-аудит попыток.
 - Для доставки на `CookingStarted` вызывает `PrintDeliveryBill(...)`.
-- Для заказа от стола добавляет кнопку `QR-счет` в экран заказа и печатает через `PrintBillCheque(...)` по нажатию этой кнопки.
+- Для заказа от стола в кодовой базе сохранён ручной сценарий через кнопку `QR-счет`, а для `iiko 9.5.8` дополнительно подготовлен альтернативный сценарий через шаблон `сервисного чека` без этой кнопки.
 
 ## Структура решения
 
 - `src/IikoFront.OrderQrPlugin` — основная библиотека плагина
 - `tests/IikoFront.OrderQrPlugin.Tests` — unit-тесты логики payload/escaping/КБЖУ
-- `service-cheque-template` — отдельный каталог под шаблон сервисного чека iiko
+- `service-cheque-template` — отдельный каталог под Razor-шаблон сервисного чека iiko
 
 ## Сборка
 
@@ -38,7 +38,19 @@
 MSBuild.exe IikoFront.OrderQrPlugin.sln /restore /p:Configuration=Release
 ```
 
-Пакет `Resto.Front.Api.V9Preview7` подтягивается из NuGet. Его `targets` автоматически отключает `Copy Local`, поэтому `Resto.Front.Api.V9Preview7.dll` не должен попадать в дистрибутив плагина.
+Пакет `Resto.Front.Api.V9` подтягивается из NuGet. Его `targets` автоматически отключает `Copy Local`, поэтому `Resto.Front.Api.V9.dll` не должен попадать в дистрибутив плагина.
+
+## Что использовать на iiko 9.5.8
+
+Для `доставки` и гостевого счёта можно продолжать использовать плагин.
+
+Для сценария `сервисного чека`:
+
+1. Возьмите файл [service-cheque-qr.cshtml](/C:/Users/SinicinVV/git_h/vs_code/service-cheque-template/service-cheque-qr.cshtml).
+2. Создайте или обновите шаблон типа `Сервисный чек` в `iikoOffice`.
+3. Привяжите этот сервисный чек в нужной схеме печати кухни.
+
+Именно этот путь сейчас является основным для варианта `без этикетки и без отдельной кнопки принудительной печати`.
 
 ## Установка в iikoFront
 
@@ -46,7 +58,7 @@ MSBuild.exe IikoFront.OrderQrPlugin.sln /restore /p:Configuration=Release
 2. Подготовьте папку плагина с файлами:
    `IikoFront.OrderQrPlugin.dll`, `manifest.xml`, `README.md`.
 3. Скопируйте папку плагина в каталог `Plugins` iikoFront.
-4. Не копируйте `Resto.Front.Api.V9Preview7.dll` вместе с плагином.
+4. Не копируйте `Resto.Front.Api.V9.dll` вместе с плагином.
 5. Разместите `order-qr-settings.json` в каталоге, который возвращает `PluginContext.Integration.GetConfigsDirectoryPath()`.
 6. Перезапустите iikoFront.
 
@@ -321,4 +333,4 @@ event=QR_PRINT_ATTEMPT status=EXTENSION_RETURNED attemptId=20260723-1542-001 ord
 
 Не нужно ставить вместе с DLL:
 
-- `Resto.Front.Api.V9Preview7.dll`
+- `Resto.Front.Api.V9.dll`

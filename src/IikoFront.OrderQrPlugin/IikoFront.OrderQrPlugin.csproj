@@ -12,7 +12,7 @@
   </PropertyGroup>
 
   <ItemGroup>
-    <PackageReference Include="Resto.Front.Api.V9Preview7" Version="9.4.6046-alpha" />
+    <PackageReference Include="Resto.Front.Api.V9" Version="9.5.6059" />
   </ItemGroup>
 
   <ItemGroup>
