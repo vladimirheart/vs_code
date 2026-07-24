@@ -7,6 +7,7 @@
 @using System.Reflection
 @functions {
     private const int PrinterQrCodePage = 866;
+    private const bool UsePrinterTransportEncoding = false;
 
     private static object GetPropertyValue(object source, params string[] names)
     {
@@ -31,6 +32,43 @@
             catch
             {
                 return null;
+            }
+        }
+
+        return null;
+    }
+
+    private static object GetPathValue(object source, params string[] paths)
+    {
+        if (source == null || paths == null)
+        {
+            return null;
+        }
+
+        foreach (var path in paths)
+        {
+            if (string.IsNullOrWhiteSpace(path))
+            {
+                continue;
+            }
+
+            object current = source;
+            var parts = path.Split('.');
+            var resolved = true;
+
+            foreach (var part in parts)
+            {
+                current = GetPropertyValue(current, part);
+                if (current == null)
+                {
+                    resolved = false;
+                    break;
+                }
+            }
+
+            if (resolved)
+            {
+                return current;
             }
         }
 
@@ -103,6 +141,11 @@
         if (string.IsNullOrEmpty(payload))
         {
             return string.Empty;
+        }
+
+        if (!UsePrinterTransportEncoding)
+        {
+            return payload;
         }
 
         var printerEncoding = ResolveEncoding(PrinterQrCodePage);
@@ -179,7 +222,21 @@
         for (var index = 0; index < items.Count; index++)
         {
             var item = items[index];
-            var itemName = ToText(GetPropertyValue(item, "Name", "ProductName", "DishName", "Title"), "-");
+            var itemName = ToText(
+                GetPathValue(
+                    item,
+                    "Name",
+                    "ProductName",
+                    "DishName",
+                    "Title",
+                    "Caption",
+                    "Product.Name",
+                    "Product.Title",
+                    "ProductItem.Name",
+                    "MenuItem.Name",
+                    "Dish.Name",
+                    "Item.Name"),
+                "-");
             var quantity = ToCompactNumber(GetPropertyValue(item, "Amount", "Quantity", "Count"), "-");
             var size = ToText(GetPropertyValue(item, "Size", "SizeName", "PortionSize"), string.Empty);
             var allergens = JoinNames(AsObjects(GetPropertyValue(item, "Allergens", "AllergenGroups")));
