@@ -18,7 +18,11 @@ namespace IikoFront.OrderQrPlugin.Payload
             foreach (var item in order.Items)
             {
                 lines.AddRange(buildItemLines(item));
-                lines.Add(buildModifiersLine(item, settings));
+                var modifiersLine = buildModifiersLine(item, settings);
+                if (!string.IsNullOrWhiteSpace(modifiersLine))
+                {
+                    lines.Add(modifiersLine);
+                }
             }
 
             return string.Join("\n", lines);
@@ -48,16 +52,23 @@ namespace IikoFront.OrderQrPlugin.Payload
 
         private static IReadOnlyList<string> buildItemLines(OrderItemQrModel item)
         {
+            var quantityFields = new List<string>
+            {
+                $"КОЛ:{item.Quantity}"
+            };
+
+            if (!isDash(item.Size))
+            {
+                quantityFields.Add($"РАЗМЕР:{PayloadEscaper.EscapeOrDash(item.Size)}");
+            }
+
             return new[]
             {
                 string.Concat(
                     item.SequenceNumber.ToString(CultureInfo.InvariantCulture),
                     ";",
                     PayloadEscaper.EscapeOrDash(item.Name)),
-                string.Join(
-                    FieldSeparator,
-                    $"КОЛ:{item.Quantity}",
-                    $"РАЗМЕР:{PayloadEscaper.EscapeOrDash(item.Size)}"),
+                string.Join(FieldSeparator, quantityFields),
                 string.Join(
                     FieldSeparator,
                     $"ККАЛ:{item.Nutrition.Caloricity}",
@@ -72,7 +83,7 @@ namespace IikoFront.OrderQrPlugin.Payload
         {
             if (!settings.IncludeModifiers || item.Modifiers.Count == 0)
             {
-                return "МОД.:-";
+                return string.Empty;
             }
 
             var modifiers = item.Modifiers
@@ -80,6 +91,11 @@ namespace IikoFront.OrderQrPlugin.Payload
                     $"{PayloadEscaper.EscapeOrDash(modifier.Name)}[КОЛ:{modifier.Quantity}; ККАЛ:{modifier.Nutrition.Caloricity}; Б:{modifier.Nutrition.Protein}; Ж:{modifier.Nutrition.Fat}; У:{modifier.Nutrition.Carbohydrate}]");
 
             return "МОД.:" + string.Join("|", modifiers);
+        }
+
+        private static bool isDash(string value)
+        {
+            return string.IsNullOrWhiteSpace(value) || value.Trim() == "-";
         }
     }
 }
