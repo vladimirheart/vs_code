@@ -218,6 +218,30 @@ namespace IikoFront.OrderQrPlugin.Printing
                 return false;
             }
 
+            if (order.Status == OrderStatus.Closed)
+            {
+                log.Info(
+                    string.Format(
+                        CultureInfo.InvariantCulture,
+                        "event=COOKING_START_PRINT_SKIPPED reason=ORDER_CLOSED orderId={0} orderNumber={1} status={2}",
+                        order.Id,
+                        order.Number,
+                        order.Status));
+                return false;
+            }
+
+            if (order.Status == OrderStatus.Deleted)
+            {
+                log.Info(
+                    string.Format(
+                        CultureInfo.InvariantCulture,
+                        "event=COOKING_START_PRINT_SKIPPED reason=ORDER_DELETED orderId={0} orderNumber={1} status={2}",
+                        order.Id,
+                        order.Number,
+                        order.Status));
+                return false;
+            }
+
             log.Info(
                 string.Format(
                     CultureInfo.InvariantCulture,
@@ -225,7 +249,22 @@ namespace IikoFront.OrderQrPlugin.Printing
                     order.Id,
                     order.Number));
 
-            operations.PrintBillCheque(order, operations.GetDefaultCredentials(), PrinterSelectionMode.Default);
+            try
+            {
+                operations.PrintBillCheque(order, operations.GetDefaultCredentials(), PrinterSelectionMode.Default);
+            }
+            catch (ConstraintViolationException ex) when (isClosedOrderViolation(order, ex))
+            {
+                log.Info(
+                    string.Format(
+                        CultureInfo.InvariantCulture,
+                        "event=COOKING_START_PRINT_SKIPPED reason=ORDER_CLOSED orderId={0} orderNumber={1} status={2}",
+                        order.Id,
+                        order.Number,
+                        order.Status));
+                return false;
+            }
+
             markAsPrinted(order, "TABLE");
 
             log.Info(
@@ -272,6 +311,19 @@ namespace IikoFront.OrderQrPlugin.Printing
         private static string normalizeLogValue(string value)
         {
             return string.IsNullOrWhiteSpace(value) ? "-" : value.Replace(' ', '_');
+        }
+
+        private static bool isClosedOrderViolation(IOrder order, ConstraintViolationException exception)
+        {
+            if (order.Status == OrderStatus.Closed || order.Status == OrderStatus.Deleted)
+            {
+                return true;
+            }
+
+            var message = exception?.Message;
+            return !string.IsNullOrWhiteSpace(message)
+                && (message.IndexOf("Closed", StringComparison.OrdinalIgnoreCase) >= 0
+                    || message.IndexOf("закрыт", StringComparison.OrdinalIgnoreCase) >= 0);
         }
 
         private sealed class ActionObserver<T> : IObserver<T>
