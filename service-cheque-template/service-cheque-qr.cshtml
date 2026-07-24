@@ -1,127 +1,597 @@
 @using System
-@using System.Linq
-@using System.Text
-@using System.Collections
 @using System.Collections.Generic
 @using System.Globalization
-@using System.Reflection
-@functions {
-    private const int PrinterQrCodePage = 866;
-    private const bool UsePrinterTransportEncoding = false;
+@using System.Linq
+@using System.Text
+@using Resto.Front.PrintTemplates.Cheques.Razor
+@using Resto.Front.PrintTemplates.Cheques.Razor.TemplateModels
+@using Resto.Front.PrintTemplates.RmsEntityWrappers
 
-    private static object GetPropertyValue(object source, params string[] names)
+@inherits TemplateBase<IServiceChequeBase>
+
+<doc bell="" formatter="split">
+    @if (Model is IServiceCheque)
     {
-        if (source == null || names == null)
-        {
-            return null;
-        }
-
-        var type = source.GetType();
-        foreach (var name in names)
-        {
-            var property = type.GetProperty(name, BindingFlags.Instance | BindingFlags.Public | BindingFlags.IgnoreCase);
-            if (property == null)
-            {
-                continue;
-            }
-
-            try
-            {
-                return property.GetValue(source, null);
-            }
-            catch
-            {
-                return null;
-            }
-        }
-
-        return null;
+        @Service((IServiceCheque)Model)
     }
-
-    private static object GetPathValue(object source, params string[] paths)
+    else if (Model is IBanquetServiceCheque)
     {
-        if (source == null || paths == null)
+        @Banquet((IBanquetServiceCheque)Model)
+    }
+    else if (Model is IDeleteProductsServiceCheque)
+    {
+        @DeleteProducts((IDeleteProductsServiceCheque)Model)
+    }
+    else if (Model is IDeleteModifiersServiceCheque)
+    {
+        @DeleteModifiers((IDeleteModifiersServiceCheque)Model)
+    }
+    else if (Model is IProductsServeCheque)
+    {
+        @ProductsServe((IProductsServeCheque)Model)
+    }
+    else if (Model is IWholeCourseServeCheque)
+    {
+        @WholeCourseServe((IWholeCourseServeCheque)Model)
+    }
+    else if (Model is ITableChangeServiceCheque)
+    {
+        @TableChanged((ITableChangeServiceCheque)Model)
+    }
+    else if (Model is IProductsMoveServiceCheque)
+    {
+        @ProductsMove((IProductsMoveServiceCheque)Model)
+    }
+    else
+    {
+        throw new NotSupportedException(string.Format("Invalid model type '{0}'", Model.GetType()));
+    }
+</doc>
+
+@* Cheques begin *@
+@helper TableChanged(ITableChangeServiceCheque cheque)
+{
+    @Header(true)
+    <center><f2>@string.Format(Resources.KitchenTableChangedWarningPattern, cheque.TableFrom.Number, cheque.TableFrom.Section.Name, cheque.Order.Number)</f2></center>
+    @Footer(false)
+}
+
+@helper ProductsMove(IProductsMoveServiceCheque cheque)
+{
+    @Header(true)
+    <center><f2>@string.Format(Resources.KitchenProductMovedWarningPattern, cheque.OrderFrom.Table.Number, cheque.OrderFrom.Table.Section.Name, cheque.OrderFrom.Number)</f2></center>
+    @CourseGroups(cheque.Entries.ToList(), false)
+    @Footer(false)
+}
+
+@helper Service(IServiceCheque cheque)
+{
+    @Header(true)
+    @CourseGroups(cheque.Entries.ToList(), true)
+    if (Model.CookingPlace.PrintKitchenBarcodeType == PrintKitchenBarcodeType.PerCheque)
+    {
+        <np />
+        <center>
+            <barcode>@cheque.Barcode</barcode>
+        </center>
+    }
+    @Footer(cheque.IsRepeatPrint)
+    @QrSupplement(cheque.Order, cheque.Entries)
+}
+
+@helper Banquet(IBanquetServiceCheque cheque)
+{
+    @:@string.Format(Resources.BanquetNumberServiceChequeHeaderTemplate, cheque.Order.Reserve.Number)
+    <np />
+    @Header(true)
+    @CourseGroups(cheque.Entries.ToList(), true)
+    @Footer(cheque.IsRepeatPrint)
+    @QrSupplement(cheque.Order, cheque.Entries)
+}
+
+@helper DeleteProducts(IDeleteProductsServiceCheque cheque)
+{
+    @Header(true)
+    <f2>@string.Format(Resources.KitchenProductDeletedWarningPattern, cheque.DeleteReason)</f2>
+    <np />
+    <np />
+    @CourseGroups(cheque.Entries.ToList(), false)
+    @Footer(false)
+}
+
+@helper DeleteModifiers(IDeleteModifiersServiceCheque cheque)
+{
+    var modifiers = cheque.ModifierEntries.ToList();
+    var parent = GetParent(modifiers[0]);
+    var mixGroup = GetParent(parent).GetProductItemsByMix().Single(group => group.Contains(parent));
+
+    @Header(true)
+    <f2>@string.Format(Resources.KitchenModifiersDeletedWarningPattern, cheque.DeleteReason)</f2>
+    <np />
+    <np />
+    <f1><np /></f1>
+    if (parent.Course != 1)
+    {
+        @CourseName(parent.Course)
+    }
+    if (mixGroup.Count == 1 && parent.CookingPlace != Model.CookingPlace && modifiers.Count == 1)
+    {
+        <f1>
+            @ModifierProductTable(modifiers[0])
+            @string.Format(Resources.ParentProductForModifierPattern, GetProductNameWithSize(parent))
+        </f1>
+    }
+    else
+    {
+        @ModifiersTable(modifiers, parent, false)
+        <f0>
+            <np />
+            <center>@Resources.ForDishTitle</center>
+            <np />
+        </f0>
+        @ProductTable(parent)
+    }
+    @Footer(false)
+}
+
+@helper ProductsServe(IProductsServeCheque cheque)
+{
+    @Header(true)
+    <f2>@Resources.TimeToServeDishes</f2>
+    <np />
+    @CourseGroups(cheque.Entries.ToList(), true)
+    @Footer(false)
+}
+
+@helper WholeCourseServe(IWholeCourseServeCheque cheque)
+{
+    @Header(false)
+    <f2>@string.Format(Resources.TimeToServeCourseTemplate, cheque.Course)</f2>
+    <np />
+    @Resources.SeeDetailsInCookingRequestText
+    <np />
+    @Footer(false)
+}
+@* Cheques end *@
+
+@helper CourseGroups(IList<IOrderEntry> entries, bool printBarcode)
+{
+    var productItems = entries.OfType<IProductItem>().ToList();
+    var modifierEntriesByParent = entries.OfType<IModifierEntry>().ToLookup(GetParent, _ => _);
+
+    var courseGroups = (from guest in Model.Order.Guests
+                        from mixGroup in guest.GetProductItemsByMixOrCompound()
+                        let mixEntries = new
+                        {
+                            ProductItems = productItems
+                                .Where(mixGroup.Contains)
+                                .OrderBy(productItem => productItem.OrderRank)
+                                .ToList(),
+                            ModifierEntriesByParent = modifierEntriesByParent
+                                .Where(g => mixGroup.Contains(g.Key))
+                                .OrderBy(g => g.Key.OrderRank)
+                                .ToList()
+                        }
+                        where mixEntries.ProductItems.Any() || mixEntries.ModifierEntriesByParent.Any()
+                        let course = mixGroup.Min(productItem => productItem.Course)
+                        orderby course, guest.OrderRank, mixGroup.Min(productItem => productItem.OrderRank)
+                        select new { Course = course, mixEntries.ProductItems, mixEntries.ModifierEntriesByParent } into courseWithEntries
+                        group courseWithEntries by courseWithEntries.Course).ToList();
+
+    var nonStandardCourseUsed = courseGroups.Any(group => group.Key != 1);
+
+    foreach (var courseGroup in courseGroups)
+    {
+        <f1><np /></f1>
+        if (nonStandardCourseUsed)
         {
-            return null;
+            @CourseName(courseGroup.Key)
         }
-
-        foreach (var path in paths)
+        foreach (var mixGroup in courseGroup)
         {
-            if (string.IsNullOrWhiteSpace(path))
+            if (mixGroup.ProductItems.Any())
             {
-                continue;
+                @MixedProducts(mixGroup.ProductItems, printBarcode)
             }
-
-            object current = source;
-            var parts = path.Split('.');
-            var resolved = true;
-
-            foreach (var part in parts)
+            foreach (var modifierEntryGroup in mixGroup.ModifierEntriesByParent)
             {
-                current = GetPropertyValue(current, part);
-                if (current == null)
+                foreach (var modifierEntry in modifierEntryGroup)
                 {
-                    resolved = false;
-                    break;
+                    @ModifierProductTable(modifierEntry)
+                    @:@string.Format(Resources.ParentProductForModifierPattern, GetProductNameWithSize(modifierEntryGroup.Key))
                 }
             }
-
-            if (resolved)
-            {
-                return current;
-            }
-        }
-
-        return null;
-    }
-
-    private static IEnumerable<object> AsObjects(object value)
-    {
-        if (value == null || value is string)
-        {
-            yield break;
-        }
-
-        var enumerable = value as IEnumerable;
-        if (enumerable == null)
-        {
-            yield break;
-        }
-
-        foreach (var item in enumerable)
-        {
-            if (item != null)
-            {
-                yield return item;
-            }
         }
     }
+}
 
-    private static string ToText(object value, string fallback)
+@helper MixedProducts(IEnumerable<IProductItem> productItems, bool printBarcode)
+{
+    var counter = 0;
+    foreach (var productItem in productItems)
     {
-        if (value == null)
+        if (counter > 0 && productItem.CompoundsInfo == null)
         {
-            return fallback;
+            @MixTable()
         }
+        counter++;
 
-        var text = Convert.ToString(value, CultureInfo.InvariantCulture);
-        return string.IsNullOrWhiteSpace(text) ? fallback : text.Trim();
+        @ProductTable(productItem)
+        @ModifiersTable(productItem)
+        if (printBarcode && Model.CookingPlace.PrintKitchenBarcodeType == PrintKitchenBarcodeType.PerDish && (productItem.CompoundsInfo == null || !productItem.CompoundsInfo.IsPrimaryComponent))
+        {
+            <np />
+            <center>
+                <barcode>@productItem.ServiceChequeBarcode</barcode>
+            </center>
+            <np />
+        }
+    }
+}
+
+@helper ProductTable(IProductItem product)
+{
+    if (product.CompoundsInfo != null && product.CompoundsInfo.IsPrimaryComponent)
+    {
+        <f1>
+            <table>
+                <columns>
+                    @TableColumns()
+                </columns>
+                <cells>
+                    <ct>@string.Format("{0} {1}", product.CompoundsInfo.ModifierSchemaName, product.ProductSize == null ? string.Empty : product.ProductSize.Name)</ct>
+                    <ct>@FormatAmount(product.Amount * 2)</ct>
+                </cells>
+            </table>
+        </f1>
+        @ModifiersTable(product, true)
+    }
+    <f1>
+        <table>
+            <columns>
+                @TableColumns()
+            </columns>
+            <cells>
+                @Product(product)
+            </cells>
+        </table>
+    </f1>
+}
+
+@helper Product(IProductItem product)
+{
+    var componentString = string.Empty;
+    if (product.CompoundsInfo != null)
+    {
+        componentString = " 1/2 ";
+    }
+    
+    <c>
+        <whitespace-preserve>@(Model.CookingPlace == product.CookingPlace
+            ? componentString + GetProductNameWithSize(product)
+            : componentString + string.Format(Resources.CookingPlaceTemplate, product.CookingPlace.Name, GetProductNameWithSize(product)))</whitespace-preserve>
+    </c>
+    
+    if (product.CompoundsInfo == null)
+    {
+        <ct>@FormatAmount(product.Amount)</ct>
+    }
+    else
+    {
+        <ct />
+    }
+}
+
+@helper ModifierProductTable(IModifierEntry modifier)
+{
+    var cookingPlace = modifier.CookingPlace;
+    <f1>
+        <table>
+            <columns>
+                @TableColumns()
+            </columns>
+            <cells>
+                <c>
+                    @(Model.CookingPlace == cookingPlace
+                        ? modifier.Product.GetKitchenOrDefaultName()
+                        : string.Format(Resources.CookingPlaceTemplate, cookingPlace.Name, modifier.Product.GetKitchenOrDefaultName()))
+                </c>
+                <ct>@FormatAmount(modifier.Amount)</ct>
+            </cells>
+        </table>
+    </f1>
+}
+
+@helper ModifiersTable(IProductItem productItem, bool onlyCommonModifiers = false)
+{
+    var commentText = productItem.Comment != null && !productItem.Comment.Deleted ? productItem.Comment.Text : null;
+    var modifiers = productItem.ModifierEntries.Where(modifier => ModifiersFilter(modifier, productItem, onlyCommonModifiers)).ToList();
+
+    var childChoiceBindingsOfExistingModifiers = new HashSet<IChildModifier>(productItem.ModifierEntries
+        .Where(modifierEntry => modifierEntry.ChildModifier != null)
+        .Select(modifierEntry => modifierEntry.ChildModifier));
+
+    var showDeltaAmount = Model.CommonInfo.CafeSetup.DisplayRelativeNumberOfModifiers;
+
+    var zeroAmountModifiers = (from groupModifier in productItem.GroupModifiers
+                              from childModifier in groupModifier.ChildModifiers
+                              where childModifier.DefaultAmount > 0 &&
+                                    (childModifier.HideIfDefaultAmount || showDeltaAmount) &&
+                                    CommonModifiersFilter(childModifier.IsCommonModifier, productItem, onlyCommonModifiers) &&
+                                    !childChoiceBindingsOfExistingModifiers.Contains(childModifier)
+                              select childModifier).ToList();
+
+    if (commentText == null && modifiers.IsEmpty() && zeroAmountModifiers.IsEmpty())
+    {
+        return;
+    }
+  
+    <f0>
+        <table>
+            <columns>
+                <column autowidth="" minwidth="2"/>
+                @TableColumns()
+            </columns>
+            <cells>
+                @* для разделенной пиццы комменты печатаем под схемой *@
+                @* для обычных блюд перед списком модификаторов *@
+                @if (commentText != null && (onlyCommonModifiers || productItem.CompoundsInfo == null))
+                {
+                    <ct />
+                    <c>
+                        @(Model.CookingPlace == productItem.CookingPlace
+                              ? commentText
+                              : string.Format(Resources.CookingPlaceTemplate, productItem.CookingPlace.Name, commentText))
+                    </c>
+                    <ct />
+                }
+                @Modifiers(modifiers, productItem, onlyCommonModifiers)
+                @foreach (var zeroAmountModifier in zeroAmountModifiers)
+                {
+                    var cookingPlace = zeroAmountModifier.Product.CookWithMainDish ? productItem.CookingPlace : zeroAmountModifier.CookingPlace;
+                    <ct />
+                    <c>
+                        @(Model.CookingPlace == cookingPlace
+                              ? zeroAmountModifier.Product.GetKitchenOrDefaultName()
+                              : string.Format(Resources.CookingPlaceTemplate, cookingPlace.Name, zeroAmountModifier.Product.GetKitchenOrDefaultName()))
+                    </c>
+                    <ct>
+                        @CalculateModifierAmountString(0, zeroAmountModifier.DefaultAmount, zeroAmountModifier.HideIfDefaultAmount, zeroAmountModifier.AmountIndependentOfParentAmount, showDeltaAmount)
+                    </ct>
+                }
+            </cells>
+        </table>
+    </f0>
+}
+
+@helper ModifiersTable(IEnumerable<IModifierEntry> modifiers, IProductItem parent, bool onlyCommonModifiers)
+{
+    <f0>
+        <table>
+            <columns>
+                <column autowidth="" minwidth="2"/>
+                @TableColumns()
+            </columns>
+            <cells>
+                @Modifiers(modifiers, parent, onlyCommonModifiers)
+            </cells>
+        </table>
+    </f0>
+}
+
+@helper Modifiers(IEnumerable<IModifierEntry> modifiers, IProductItem parent, bool onlyCommonModifiers)
+{
+    var parentAmount = GetParentAmount(parent, onlyCommonModifiers);
+    foreach (var modifier in modifiers)
+    {
+        var cookingPlace = modifier.CookingPlace;
+        var amount = modifier.IsAmountIndependentOfParentAmount() ? modifier.Amount : (int)(modifier.Amount / parentAmount);
+        var defaultAmount = modifier.ChildModifier != null ? modifier.ChildModifier.DefaultAmount : modifier.SimpleModifier.DefaultAmount;
+        var hide = modifier.ChildModifier != null ? modifier.ChildModifier.HideIfDefaultAmount : false;
+        var showDeltaAmount = Model.CommonInfo.CafeSetup.DisplayRelativeNumberOfModifiers;
+
+        <ct />
+        <c>
+            @(Model.CookingPlace == cookingPlace
+                ? modifier.Product.GetKitchenOrDefaultName()
+                : string.Format(Resources.CookingPlaceTemplate, cookingPlace.Name, modifier.Product.GetKitchenOrDefaultName()))
+        </c>
+        <ct>
+            @CalculateModifierAmountString(amount, defaultAmount, hide, modifier.IsAmountIndependentOfParentAmount(), showDeltaAmount)
+        </ct>
+    }
+}
+
+@helper Header(bool showGuestsCount)
+{
+    var order = Model.Order;
+    <whitespace-preserve>@string.Format(Resources.KitchenHeaderPattern, FormatFullDateTime(Model.CommonInfo.CurrentTime), order.Number, Model.PrinterCounter, order.Waiter.GetNameOrEmpty())</whitespace-preserve>
+    if (!string.IsNullOrWhiteSpace(order.ExternalNumber))
+    {
+        <left><wrap>@string.Format(Resources.BillHeaderOrderExternalNumberPattern, order.ExternalNumber)</wrap></left>
+    }
+    if (order.TabName != null)
+    {
+        <left>@string.Format(Resources.BillHeaderTabPattern, order.TabName)</left>
+    }
+    <np />
+    <np />
+    <f1>
+        @if (showGuestsCount)
+        {
+            <split>@string.Format(Resources.ServiceChequeHeaderLocationPattern, order.Table.Number, order.Table.Section.Name, order.InitialGuestsCount)</split>
+        }
+        else
+        {
+            @:@string.Format(Resources.KitchenTablePattern, order.Table.Number, order.Table.Section.Name)
+        }
+    </f1>
+    <np />
+    <np />
+}
+
+@helper Footer(bool isRepeatPrint)
+{
+    if (isRepeatPrint)
+    {
+        <np />
+        <f2>@Resources.KitchenRepeated</f2>
+        <np />
+    }
+    <np />
+    <np />
+}
+
+@helper QrSupplement(IOrder order, IEnumerable<IOrderEntry> entries)
+{
+    var payload = EncodeQrPayload(BuildQrPayload(order, entries));
+    if (!string.IsNullOrWhiteSpace(payload))
+    {
+        <np />
+        <center>
+            <qrcode>@payload</qrcode>
+        </center>
+        <np />
+    }
+}
+
+@helper MixTable()
+{
+    <table>
+        <columns>
+            @TableColumns()
+        </columns>
+        <cells>
+            <c>@Resources.Mix</c>
+            <c />
+        </cells>
+    </table>
+}
+
+@helper TableColumns()
+{
+    <column formatter="split" />
+    <column autowidth="" />
+}
+
+@helper CourseName(int courseNumber)
+{
+    <f1>@GetCourseTitle(courseNumber)</f1>
+}
+
+@functions
+{
+    private const int PrinterQrCodePage = 866;
+    private const bool UsePrinterTransportEncoding = true;
+
+    private string GetCourseTitle(int course)
+    {
+        string name;
+
+        if (Model.CommonInfo.CafeSetup.CourseCustomNames.TryGetValue(course, out name) && course != 0)
+            return name;
+
+        switch (course)
+        {
+            case 0:
+                return Model is IServiceCheque || Model is IBanquetServiceCheque
+                    ? Resources.KitchenCourseVipTitlePrefix + " " + (name ?? Resources.KitchenCourseVipTitle)
+                    : name ?? Resources.KitchenCourseVipTitle;
+            case 1:
+                return Resources.KitchenCourse1Title;
+            case 2:
+                return Resources.KitchenCourse2Title;
+            case 3:
+                return Resources.KitchenCourse3Title;
+            case 4:
+                return Resources.KitchenCourse4Title;
+            default:
+                return string.Format(Resources.KitchenCourseTitleFormat, course);
+        }
     }
 
-    private static string ToCompactNumber(object value, string fallback)
+    private IProductItem GetParent(IModifierEntry modifierEntry)
     {
-        if (value == null)
-        {
-            return fallback;
-        }
+        return Model.Order.Guests
+            .SelectMany(guest => guest.Items.OfType<IProductItem>())
+            .Single(productItem => productItem.ModifierEntries.Contains(modifierEntry));
+    }
 
-        decimal decimalValue;
-        if (decimal.TryParse(Convert.ToString(value, CultureInfo.InvariantCulture), NumberStyles.Any, CultureInfo.InvariantCulture, out decimalValue))
-        {
-            return decimalValue.ToString("0.###", CultureInfo.InvariantCulture);
-        }
+    private IGuest GetParent(IProductItem productItem)
+    {
+        return Model.Order.Guests.Single(guest => guest.Items.Contains(productItem));
+    }
 
-        return ToText(value, fallback);
+    private static bool CommonModifiersFilter(bool isCommonModifier, IProductItem parent, bool onlyCommonModifiers)
+    {
+        if (parent.CompoundsInfo != null && parent.CompoundsInfo.IsPrimaryComponent)
+        {
+            if (onlyCommonModifiers && !isCommonModifier)
+                return false;
+            if (!onlyCommonModifiers && isCommonModifier)
+                return false;
+            return true;
+        }
+        return true;
+    }
+
+    private static bool ModifiersFilter(IModifierEntry modifierEntry, IProductItem parent, bool onlyCommonModifiers)
+    {
+        if (modifierEntry.DeletionInfo != null)
+            return false;
+
+        if (!CommonModifiersFilter(modifierEntry.IsCommonModifier, parent, onlyCommonModifiers))
+            return false;
+
+        if (modifierEntry.ChildModifier == null)
+            return true;
+
+        if (!modifierEntry.ChildModifier.HideIfDefaultAmount)
+            return true;
+
+        if (modifierEntry.CookingPlaceType != parent.CookingPlaceType)
+            return true;
+
+        var amountPerItem = modifierEntry.ChildModifier.AmountIndependentOfParentAmount
+            ? modifierEntry.Amount
+            : modifierEntry.Amount / GetParentAmount(parent, onlyCommonModifiers);
+
+        return amountPerItem != modifierEntry.ChildModifier.DefaultAmount;
+    }
+
+    private static string GetProductNameWithSize(IProductItem productItem)
+    {
+        return productItem.ProductSize == null || productItem.CompoundsInfo != null
+            ? productItem.Product.GetKitchenOrDefaultName()
+            : string.Format(Resources.ProductNameWithSizeFormat, productItem.Product.GetKitchenOrDefaultName(), productItem.ProductSize.Name);
+    }
+
+    private static decimal GetParentAmount(IOrderItem parent, bool onlyCommonModifiers)
+    {
+        return onlyCommonModifiers ? parent.Amount * 2 : parent.Amount;
+    }
+
+    private static string CalculateModifierAmountString(decimal modifierAmount, int defaultAmount, bool hideIfDefaultAmount, bool isAmountIndependentOfParentAmount, bool showDeltaAmount)
+    {
+        if (isAmountIndependentOfParentAmount)
+            return string.Format(Resources.KitchenModifierAbsoluteAmountPattern, modifierAmount);
+
+        if (!showDeltaAmount)
+            return string.Format(Resources.KitchenModifierAmountPattern, modifierAmount);
+
+        var amount = (int)modifierAmount - defaultAmount;
+
+        switch (amount)
+        {
+            case 1:
+                return "+";
+            case -1:
+                return "-";
+            case 0:
+                return hideIfDefaultAmount ? string.Empty : string.Format(Resources.KitchenModifierAmountPattern, modifierAmount);
+            default:
+                return string.Format(Resources.KitchenModifierPlusMinusAmountPattern, amount);
+        }
     }
 
     private static Encoding ResolveEncoding(int codePage)
@@ -138,7 +608,7 @@
 
     private static string EncodeQrPayload(string payload)
     {
-        if (string.IsNullOrEmpty(payload))
+        if (string.IsNullOrWhiteSpace(payload))
         {
             return string.Empty;
         }
@@ -152,126 +622,55 @@
         return printerEncoding.GetString(Encoding.UTF8.GetBytes(payload));
     }
 
-    private static string JoinNames(IEnumerable<object> source)
+    private string BuildQrPayload(IOrder order, IEnumerable<IOrderEntry> entries)
     {
-        var values = new List<string>();
-        foreach (var item in source)
+        if (order == null || entries == null)
         {
-            var name = ToText(
-                GetPropertyValue(item, "Name", "DisplayName", "Title", "FullName"),
-                string.Empty);
-
-            if (!string.IsNullOrWhiteSpace(name))
-            {
-                values.Add(name);
-            }
+            return string.Empty;
         }
 
-        return values.Count == 0 ? "-" : string.Join(", ", values.Distinct());
-    }
-
-    private static string FormatFoodValue(object item, params string[] propertyNames)
-    {
-        var value = GetPropertyValue(item, propertyNames);
-        return ToCompactNumber(value, "-");
-    }
-
-    private static object ResolveOrder(object model)
-    {
-        return GetPropertyValue(model, "Order", "CurrentOrder", "Document", "SourceOrder") ?? model;
-    }
-
-    private static List<object> ResolveItems(object model, object order)
-    {
-        return AsObjects(
-                GetPropertyValue(
-                    order,
-                    "Items",
-                    "OrderItems",
-                    "Products",
-                    "ProductItems",
-                    "Lines",
-                    "Entries",
-                    "GuestItems")
-                ?? GetPropertyValue(
-                    model,
-                    "Items",
-                    "OrderItems",
-                    "Products",
-                    "ProductItems",
-                    "Lines",
-                    "Entries",
-                    "GuestItems"))
+        var productItems = entries
+            .OfType<IProductItem>()
+            .Where(productItem => productItem.CompoundsInfo == null || productItem.CompoundsInfo.IsPrimaryComponent)
+            .OrderBy(productItem => productItem.OrderRank)
             .ToList();
-    }
 
-    private static string BuildPayload(object model)
-    {
-        var order = ResolveOrder(model);
-        var orderNumber = ToText(GetPropertyValue(order, "Number", "OrderNumber"), "-");
-        var items = ResolveItems(model, order);
         var builder = new StringBuilder();
-
         builder.Append("ЗАК:")
-            .Append(orderNumber)
+            .Append(order.Number)
             .Append("; Д.:")
-            .Append(DateTime.Now.ToString("yyyy-MM-ddTHH:mm:ss", CultureInfo.InvariantCulture))
+            .Append(Model.CommonInfo.CurrentTime.ToString("yyyy-MM-ddTHH:mm:ss", CultureInfo.InvariantCulture))
             .Append("; ПОЗ.:")
-            .Append(items.Count);
+            .Append(productItems.Count);
 
-        for (var index = 0; index < items.Count; index++)
+        var lineNumber = 0;
+        foreach (var productItem in productItems)
         {
-            var item = items[index];
-            var itemName = ToText(
-                GetPathValue(
-                    item,
-                    "Name",
-                    "ProductName",
-                    "DishName",
-                    "Title",
-                    "Caption",
-                    "Product.Name",
-                    "Product.Title",
-                    "ProductItem.Name",
-                    "MenuItem.Name",
-                    "Dish.Name",
-                    "Item.Name"),
-                "-");
-            var quantity = ToCompactNumber(GetPropertyValue(item, "Amount", "Quantity", "Count"), "-");
-            var size = ToText(GetPropertyValue(item, "Size", "SizeName", "PortionSize"), string.Empty);
-            var allergens = JoinNames(AsObjects(GetPropertyValue(item, "Allergens", "AllergenGroups")));
-            var modifiers = JoinNames(AsObjects(GetPropertyValue(item, "Modifiers", "ChildModifiers", "OrderModifiers")));
-
+            lineNumber++;
             builder.AppendLine()
-                .Append(index + 1)
+                .Append(lineNumber)
                 .Append(";")
-                .Append(itemName);
+                .Append(GetQrProductName(productItem));
 
             builder.AppendLine()
                 .Append("КОЛ:")
-                .Append(quantity);
+                .Append(FormatQrAmount(productItem.Amount));
 
-            if (!string.IsNullOrWhiteSpace(size) && size != "-")
+            var sizeName = GetQrSizeName(productItem);
+            if (!string.IsNullOrWhiteSpace(sizeName))
             {
                 builder.Append("; РАЗМЕР:")
-                    .Append(size);
+                    .Append(sizeName);
             }
 
             builder.AppendLine()
-                .Append("ККАЛ:")
-                .Append(FormatFoodValue(item, "Calories", "Kkal", "KCal", "EnergyKcal"))
-                .Append("; Б:")
-                .Append(FormatFoodValue(item, "Proteins", "Protein"))
-                .Append("; Ж:")
-                .Append(FormatFoodValue(item, "Fats", "Fat"))
-                .Append("; У:")
-                .Append(FormatFoodValue(item, "Carbohydrates", "Carbs"));
+                .Append("ККАЛ:-; Б:-; Ж:-; У:-");
 
             builder.AppendLine()
-                .Append("АЛГ:")
-                .Append(allergens);
+                .Append("АЛГ:-");
 
-            if (modifiers != "-")
+            var modifiers = GetQrModifiers(productItem);
+            if (!string.IsNullOrWhiteSpace(modifiers))
             {
                 builder.AppendLine()
                     .Append("МОД.:")
@@ -281,10 +680,51 @@
 
         return builder.ToString();
     }
+
+    private static string GetQrProductName(IProductItem productItem)
+    {
+        if (productItem.CompoundsInfo != null && productItem.CompoundsInfo.IsPrimaryComponent)
+        {
+            return productItem.CompoundsInfo.ModifierSchemaName;
+        }
+
+        return productItem.Product.GetKitchenOrDefaultName();
+    }
+
+    private static string GetQrSizeName(IProductItem productItem)
+    {
+        if (productItem.CompoundsInfo != null)
+        {
+            return string.Empty;
+        }
+
+        return productItem.ProductSize == null ? string.Empty : productItem.ProductSize.Name;
+    }
+
+    private string GetQrModifiers(IProductItem productItem)
+    {
+        var modifiers = productItem.ModifierEntries
+            .Where(modifier => ModifiersFilter(modifier, productItem, false))
+            .Select(modifier =>
+            {
+                var amount = modifier.IsAmountIndependentOfParentAmount()
+                    ? modifier.Amount
+                    : modifier.Amount / GetParentAmount(productItem, false);
+
+                var modifierName = modifier.Product.GetKitchenOrDefaultName();
+                var amountText = FormatQrAmount(amount);
+                return amountText == "1"
+                    ? modifierName
+                    : string.Format("{0} x{1}", modifierName, amountText);
+            })
+            .Distinct()
+            .ToList();
+
+        return modifiers.Count == 0 ? string.Empty : string.Join(", ", modifiers);
+    }
+
+    private static string FormatQrAmount(decimal value)
+    {
+        return value.ToString("0.###", CultureInfo.InvariantCulture);
+    }
 }
-@{
-    var payload = EncodeQrPayload(BuildPayload(Model));
-}
-<doc>
-  <qrcode>@payload</qrcode>
-</doc>
