@@ -142,6 +142,7 @@ namespace IikoFront.OrderQrPlugin.Tests
 
             StringAssert.Contains(payload, "ЗАК:87; Д.:2026-07-24T11:21:28; ПОЗ.:1");
             StringAssert.Contains(payload, "1;Test item\nКОЛ:1\nККАЛ:161.8; Б:8.3; Ж:0.6; У:30.8\nАЛГ:-");
+            Assert.IsFalse(payload.StartsWith("IIKOQR1"));
             Assert.IsFalse(payload.Contains("РАЗМЕР:-"));
             Assert.IsFalse(payload.Contains("МОД.:"));
         }

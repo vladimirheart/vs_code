@@ -12,7 +12,7 @@ namespace IikoFront.OrderQrPlugin.Payload
 
         public string Build(OrderQrModel order, PluginSettings settings)
         {
-            var lines = new List<string> { settings.PayloadVersion };
+            var lines = new List<string>();
             lines.Add(buildOrderLine(order, settings));
 
             foreach (var item in order.Items)

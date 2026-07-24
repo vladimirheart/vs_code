@@ -1,5 +1,6 @@
 using System;
 using System.Globalization;
+using System.Linq;
 using Resto.Front.Api;
 using Resto.Front.Api.Data.Orders;
 using Resto.Front.Api.Data.Print;
@@ -38,6 +39,25 @@ namespace IikoFront.OrderQrPlugin.Printing
 
             try
             {
+                var activeItems = order.Items
+                    .Where(item => item != null && !item.Deleted)
+                    .ToList();
+
+                if (activeItems.Count == 0)
+                {
+                    log.Info(
+                        string.Format(
+                            CultureInfo.InvariantCulture,
+                            "event=TABLE_MANUAL_PRINT_SKIPPED reason=EMPTY_ORDER orderId={0} orderNumber={1}",
+                            order.Id,
+                            order.Number));
+
+                    viewManager.ShowErrorPopup(
+                        "В заказе нет позиций для печати гостевого счета.",
+                        OkButtonText);
+                    return;
+                }
+
                 log.Info(
                     string.Format(
                         CultureInfo.InvariantCulture,
@@ -45,6 +65,7 @@ namespace IikoFront.OrderQrPlugin.Printing
                         order.Id,
                         order.Number));
 
+                PrintMissingKitchenItems(order, operations);
                 operations.PrintBillCheque(order, operations.GetDefaultCredentials(), PrinterSelectionMode.Default);
 
                 log.Info(
@@ -73,6 +94,32 @@ namespace IikoFront.OrderQrPlugin.Printing
                     "Заказ уже закрыт. Откройте актуальный заказ и повторите печать.",
                     OkButtonText);
             }
+            catch (ConstraintViolationException ex) when (IsEmptyOrderViolation(ex))
+            {
+                log.Info(
+                    string.Format(
+                        CultureInfo.InvariantCulture,
+                        "event=TABLE_MANUAL_PRINT_SKIPPED reason=EMPTY_ORDER orderId={0} orderNumber={1}",
+                        order.Id,
+                        order.Number));
+
+                viewManager.ShowErrorPopup(
+                    "iikoFront считает заказ пустым для печати гостевого счета. Проверьте, что в заказе есть позиции.",
+                    OkButtonText);
+            }
+            catch (ConstraintViolationException ex) when (IsNonPrintedItemsViolation(ex))
+            {
+                log.Info(
+                    string.Format(
+                        CultureInfo.InvariantCulture,
+                        "event=TABLE_MANUAL_PRINT_SKIPPED reason=NON_PRINTED_ITEMS orderId={0} orderNumber={1}",
+                        order.Id,
+                        order.Number));
+
+                viewManager.ShowErrorPopup(
+                    "В заказе остались неотпечатанные позиции. Сначала отправьте позиции на сервисную печать, затем повторите QR-счет.",
+                    OkButtonText);
+            }
             catch (Exception ex)
             {
                 log.Error(
@@ -88,6 +135,37 @@ namespace IikoFront.OrderQrPlugin.Printing
             }
         }
 
+        private void PrintMissingKitchenItems(IOrder order, IOperationService operations)
+        {
+            var newCookingItems = order.Items
+                .OfType<IOrderCookingItem>()
+                .Where(item => !item.Deleted && item.Status == OrderItemStatus.Added)
+                .ToList();
+
+            if (newCookingItems.Count == 0)
+            {
+                return;
+            }
+
+            log.Info(
+                string.Format(
+                    CultureInfo.InvariantCulture,
+                    "event=TABLE_MANUAL_KITCHEN_PRINT_STARTED orderId={0} orderNumber={1} items={2}",
+                    order.Id,
+                    order.Number,
+                    newCookingItems.Count));
+
+            operations.PrintOrderItems(order, newCookingItems, operations.GetDefaultCredentials());
+
+            log.Info(
+                string.Format(
+                    CultureInfo.InvariantCulture,
+                    "event=TABLE_MANUAL_KITCHEN_PRINT_REQUESTED orderId={0} orderNumber={1} items={2}",
+                    order.Id,
+                    order.Number,
+                    newCookingItems.Count));
+        }
+
         private static bool IsClosedOrderViolation(IOrder order, ConstraintViolationException exception)
         {
             if (order.Status == OrderStatus.Closed || order.Status == OrderStatus.Deleted)
@@ -99,6 +177,20 @@ namespace IikoFront.OrderQrPlugin.Printing
             return !string.IsNullOrWhiteSpace(message)
                 && (message.IndexOf("Closed", StringComparison.OrdinalIgnoreCase) >= 0
                     || message.IndexOf("Р·Р°РєСЂС‹С‚", StringComparison.OrdinalIgnoreCase) >= 0);
+        }
+
+        private static bool IsEmptyOrderViolation(ConstraintViolationException exception)
+        {
+            var message = exception?.Message;
+            return !string.IsNullOrWhiteSpace(message)
+                && message.IndexOf("empty order", StringComparison.OrdinalIgnoreCase) >= 0;
+        }
+
+        private static bool IsNonPrintedItemsViolation(ConstraintViolationException exception)
+        {
+            var message = exception?.Message;
+            return !string.IsNullOrWhiteSpace(message)
+                && message.IndexOf("non-printed items", StringComparison.OrdinalIgnoreCase) >= 0;
         }
     }
 }
