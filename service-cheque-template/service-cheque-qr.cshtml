@@ -444,14 +444,18 @@
 
 @helper QrSupplement(IOrder order, IEnumerable<IOrderEntry> entries)
 {
-    var payload = EncodeQrPayload(BuildQrPayload(order, entries));
-    if (!string.IsNullOrWhiteSpace(payload))
+    var payloads = BuildQrPayloads(order, entries);
+    foreach (var payload in payloads)
     {
-        <np />
-        <center>
-            <qrcode>@payload</qrcode>
-        </center>
-        <np />
+        var encodedPayload = EncodeQrPayload(payload);
+        if (!string.IsNullOrWhiteSpace(encodedPayload))
+        {
+            <np />
+            <center>
+                <qrcode>@encodedPayload</qrcode>
+            </center>
+            <np />
+        }
     }
 }
 
@@ -483,6 +487,8 @@
 {
     private const int PrinterQrCodePage = 866;
     private const bool UsePrinterTransportEncoding = true;
+    private const int MaxQrPayloadUtf8Bytes = 900;
+    private const string QrNewLine = "\r\n";
 
     private string GetCourseTitle(int course)
     {
@@ -622,11 +628,11 @@
         return printerEncoding.GetString(Encoding.UTF8.GetBytes(payload));
     }
 
-    private string BuildQrPayload(IOrder order, IEnumerable<IOrderEntry> entries)
+    private List<string> BuildQrPayloads(IOrder order, IEnumerable<IOrderEntry> entries)
     {
         if (order == null || entries == null)
         {
-            return string.Empty;
+            return new List<string>();
         }
 
         var productItems = entries
@@ -635,50 +641,125 @@
             .OrderBy(productItem => productItem.OrderRank)
             .ToList();
 
+        var itemBlocks = new List<string>();
+        var lineNumber = 1;
+        foreach (var productItem in productItems)
+        {
+            itemBlocks.Add(BuildQrItemBlock(productItem, lineNumber));
+            lineNumber++;
+        }
+
+        if (itemBlocks.Count == 0)
+        {
+            return new List<string> { BuildQrHeader(order, 0, 1, 1) };
+        }
+
+        var chunks = SplitQrItemBlocks(order, productItems.Count, itemBlocks);
+        var payloads = new List<string>();
+        for (var chunkIndex = 0; chunkIndex < chunks.Count; chunkIndex++)
+        {
+            var builder = new StringBuilder();
+            builder.Append(BuildQrHeader(order, productItems.Count, chunkIndex + 1, chunks.Count));
+            foreach (var itemBlock in chunks[chunkIndex])
+            {
+                builder.Append(QrNewLine)
+                    .Append(itemBlock);
+            }
+
+            payloads.Add(builder.ToString());
+        }
+
+        return payloads;
+    }
+
+    private List<List<string>> SplitQrItemBlocks(IOrder order, int totalItems, List<string> itemBlocks)
+    {
+        var chunks = new List<List<string>>();
+        var currentChunk = new List<string>();
+        var headerReserveBytes = GetUtf8BytesCount(BuildQrHeader(order, totalItems, 99, 99));
+        var currentBytes = headerReserveBytes;
+
+        foreach (var itemBlock in itemBlocks)
+        {
+            var itemBytes = GetUtf8BytesCount(QrNewLine + itemBlock);
+            if (currentChunk.Count > 0 && currentBytes + itemBytes > MaxQrPayloadUtf8Bytes)
+            {
+                chunks.Add(currentChunk);
+                currentChunk = new List<string>();
+                currentBytes = headerReserveBytes;
+            }
+
+            currentChunk.Add(itemBlock);
+            currentBytes += itemBytes;
+        }
+
+        if (currentChunk.Count > 0)
+        {
+            chunks.Add(currentChunk);
+        }
+
+        return chunks;
+    }
+
+    private string BuildQrHeader(IOrder order, int totalItems, int chunkIndex, int chunkCount)
+    {
         var builder = new StringBuilder();
         builder.Append("ЗАК:")
             .Append(order.Number)
             .Append("; Д.:")
             .Append(Model.CommonInfo.CurrentTime.ToString("yyyy-MM-ddTHH:mm:ss", CultureInfo.InvariantCulture))
             .Append("; ПОЗ.:")
-            .Append(productItems.Count);
+            .Append(totalItems);
 
-        var lineNumber = 0;
-        foreach (var productItem in productItems)
+        if (chunkCount > 1)
         {
-            lineNumber++;
-            builder.AppendLine()
-                .Append(lineNumber)
-                .Append(";")
-                .Append(GetQrProductName(productItem));
-
-            builder.AppendLine()
-                .Append("КОЛ:")
-                .Append(FormatQrAmount(productItem.Amount));
-
-            var sizeName = GetQrSizeName(productItem);
-            if (!string.IsNullOrWhiteSpace(sizeName))
-            {
-                builder.Append("; РАЗМЕР:")
-                    .Append(sizeName);
-            }
-
-            builder.AppendLine()
-                .Append("ККАЛ:-; Б:-; Ж:-; У:-");
-
-            builder.AppendLine()
-                .Append("АЛГ:-");
-
-            var modifiers = GetQrModifiers(productItem);
-            if (!string.IsNullOrWhiteSpace(modifiers))
-            {
-                builder.AppendLine()
-                    .Append("МОД.:")
-                    .Append(modifiers);
-            }
+            builder.Append("; Ч.:")
+                .Append(chunkIndex)
+                .Append("/")
+                .Append(chunkCount);
         }
 
         return builder.ToString();
+    }
+
+    private string BuildQrItemBlock(IProductItem productItem, int lineNumber)
+    {
+        var builder = new StringBuilder();
+        builder.Append(lineNumber)
+            .Append(";")
+            .Append(GetQrProductName(productItem));
+
+        builder.Append(QrNewLine)
+            .Append("КОЛ:")
+            .Append(FormatQrAmount(productItem.Amount));
+
+        var sizeName = GetQrSizeName(productItem);
+        if (!string.IsNullOrWhiteSpace(sizeName))
+        {
+            builder.Append("; РАЗМЕР:")
+                .Append(sizeName);
+        }
+
+        builder.Append(QrNewLine)
+            .Append("ККАЛ:-; Б:-; Ж:-; У:-");
+
+        builder.Append(QrNewLine)
+            .Append("АЛГ:-");
+
+        var modifiers = GetQrModifiers(productItem);
+        if (!string.IsNullOrWhiteSpace(modifiers))
+        {
+            builder.Append(QrNewLine)
+                .Append("МОД.:")
+                .Append(modifiers);
+        }
+
+        return builder.ToString();
+    }
+
+    private static int GetUtf8BytesCount(string value)
+    {
+        return string.IsNullOrEmpty(value) ? 0 : Encoding.UTF8.GetByteCount(value);
     }
 
     private static string GetQrProductName(IProductItem productItem)
