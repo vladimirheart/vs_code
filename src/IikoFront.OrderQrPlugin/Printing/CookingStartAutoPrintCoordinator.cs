@@ -1,18 +1,23 @@
 using System;
 using System.Collections.Concurrent;
 using System.Globalization;
+using System.Threading;
+using System.Threading.Tasks;
 using IikoFront.OrderQrPlugin.Configuration;
 using Resto.Front.Api;
 using Resto.Front.Api.Data.Common;
 using Resto.Front.Api.Data.Kitchen;
 using Resto.Front.Api.Data.Orders;
 using Resto.Front.Api.Data.Print;
+using Resto.Front.Api.Exceptions;
 
 namespace IikoFront.OrderQrPlugin.Printing
 {
     public sealed class CookingStartAutoPrintCoordinator
     {
         private const string ExternalDataKey = "IikoFront.OrderQrPlugin.CookingStartPrinted";
+        private const int PrintRetryCount = 6;
+        private const int RetryDelayMs = 500;
 
         private readonly IOperationService operations;
         private readonly PluginSettings settings;
@@ -62,92 +67,7 @@ namespace IikoFront.OrderQrPlugin.Printing
                 return;
             }
 
-            try
-            {
-                var order = operations.GetOrderById(kitchenOrder.BaseOrderId);
-                if (order == null)
-                {
-                    log.Warn(
-                        string.Format(
-                            CultureInfo.InvariantCulture,
-                            "event=COOKING_START_PRINT_SKIPPED reason=ORDER_NOT_FOUND orderId={0}",
-                            kitchenOrder.BaseOrderId));
-                    inFlightOrPrinted.TryRemove(kitchenOrderId, out _);
-                    return;
-                }
-
-                if (order is IDeliveryOrder deliveryOrder)
-                {
-                    if (!settings.PrintDeliveryBillOnCookingStart)
-                    {
-                        log.Info(
-                            string.Format(
-                                CultureInfo.InvariantCulture,
-                                "event=COOKING_START_PRINT_SKIPPED reason=DELIVERY_DISABLED orderId={0} orderNumber={1}",
-                                order.Id,
-                                order.Number));
-                        inFlightOrPrinted.TryRemove(kitchenOrderId, out _);
-                        return;
-                    }
-
-                    log.Info(
-                        string.Format(
-                            CultureInfo.InvariantCulture,
-                            "event=COOKING_START_PRINT_STARTED mode=DELIVERY orderId={0} orderNumber={1}",
-                            order.Id,
-                            order.Number));
-
-                    operations.PrintDeliveryBill(deliveryOrder, operations.GetDefaultCredentials());
-                    markAsPrinted(kitchenOrder, "DELIVERY");
-
-                    log.Info(
-                        string.Format(
-                            CultureInfo.InvariantCulture,
-                            "event=COOKING_START_PRINT_REQUESTED mode=DELIVERY orderId={0} orderNumber={1}",
-                            order.Id,
-                            order.Number));
-                    return;
-                }
-
-                if (!settings.PrintTableBillOnCookingStart)
-                {
-                    log.Info(
-                        string.Format(
-                            CultureInfo.InvariantCulture,
-                            "event=COOKING_START_PRINT_SKIPPED reason=TABLE_DISABLED orderId={0} orderNumber={1}",
-                            order.Id,
-                            order.Number));
-                    inFlightOrPrinted.TryRemove(kitchenOrderId, out _);
-                    return;
-                }
-
-                log.Info(
-                    string.Format(
-                        CultureInfo.InvariantCulture,
-                        "event=COOKING_START_PRINT_STARTED mode=TABLE orderId={0} orderNumber={1}",
-                        order.Id,
-                        order.Number));
-
-                operations.PrintBillCheque(order, operations.GetDefaultCredentials(), PrinterSelectionMode.Default);
-                markAsPrinted(kitchenOrder, "TABLE");
-
-                log.Info(
-                    string.Format(
-                        CultureInfo.InvariantCulture,
-                        "event=COOKING_START_PRINT_REQUESTED mode=TABLE orderId={0} orderNumber={1}",
-                        order.Id,
-                        order.Number));
-            }
-            catch (Exception ex)
-            {
-                inFlightOrPrinted.TryRemove(kitchenOrderId, out _);
-                log.Error(
-                    string.Format(
-                        CultureInfo.InvariantCulture,
-                        "event=COOKING_START_PRINT_FAILED orderId={0}",
-                        kitchenOrder.BaseOrderId),
-                    ex);
-            }
+            Task.Run(() => ProcessCookingStartPrintAsync(kitchenOrder.BaseOrderId));
         }
 
         private bool isAlreadyPrinted(IKitchenOrder kitchenOrder)
@@ -160,7 +80,141 @@ namespace IikoFront.OrderQrPlugin.Printing
             return operations.TryGetKitchenOrderExternalDataByKey(kitchenOrder, ExternalDataKey) != null;
         }
 
-        private void markAsPrinted(IKitchenOrder kitchenOrder, string mode)
+        private async Task ProcessCookingStartPrintAsync(Guid orderId)
+        {
+            try
+            {
+                for (var attempt = 1; attempt <= PrintRetryCount; attempt++)
+                {
+                    try
+                    {
+                        if (TryPrint(orderId))
+                        {
+                            return;
+                        }
+
+                        inFlightOrPrinted.TryRemove(orderId, out _);
+                        return;
+                    }
+                    catch (EntityAlreadyInUseException) when (attempt < PrintRetryCount)
+                    {
+                        log.Warn(
+                            string.Format(
+                                CultureInfo.InvariantCulture,
+                                "event=COOKING_START_PRINT_RETRY orderId={0} attempt={1} delayMs={2} reason=ENTITY_ALREADY_IN_USE",
+                                orderId,
+                                attempt,
+                                RetryDelayMs));
+                        await Task.Delay(RetryDelayMs).ConfigureAwait(false);
+                    }
+                    catch (Exception ex)
+                    {
+                        inFlightOrPrinted.TryRemove(orderId, out _);
+                        log.Error(
+                            string.Format(
+                                CultureInfo.InvariantCulture,
+                                "event=COOKING_START_PRINT_FAILED orderId={0}",
+                                orderId),
+                            ex);
+                        return;
+                    }
+                }
+
+                inFlightOrPrinted.TryRemove(orderId, out _);
+                log.Error(
+                    string.Format(
+                        CultureInfo.InvariantCulture,
+                        "event=COOKING_START_PRINT_FAILED orderId={0} reason=ENTITY_ALREADY_IN_USE_RETRY_LIMIT",
+                        orderId));
+            }
+            catch (Exception ex)
+            {
+                inFlightOrPrinted.TryRemove(orderId, out _);
+                log.Error(
+                    string.Format(
+                        CultureInfo.InvariantCulture,
+                        "event=COOKING_START_PRINT_FAILED orderId={0}",
+                        orderId),
+                    ex);
+            }
+        }
+
+        private bool TryPrint(Guid orderId)
+        {
+            var order = operations.GetOrderById(orderId);
+            if (order == null)
+            {
+                log.Warn(
+                    string.Format(
+                        CultureInfo.InvariantCulture,
+                        "event=COOKING_START_PRINT_SKIPPED reason=ORDER_NOT_FOUND orderId={0}",
+                        orderId));
+                return false;
+            }
+
+            if (order is IDeliveryOrder deliveryOrder)
+            {
+                if (!settings.PrintDeliveryBillOnCookingStart)
+                {
+                    log.Info(
+                        string.Format(
+                            CultureInfo.InvariantCulture,
+                            "event=COOKING_START_PRINT_SKIPPED reason=DELIVERY_DISABLED orderId={0} orderNumber={1}",
+                            order.Id,
+                            order.Number));
+                    return false;
+                }
+
+                log.Info(
+                    string.Format(
+                        CultureInfo.InvariantCulture,
+                        "event=COOKING_START_PRINT_STARTED mode=DELIVERY orderId={0} orderNumber={1}",
+                        order.Id,
+                        order.Number));
+
+                operations.PrintDeliveryBill(deliveryOrder, operations.GetDefaultCredentials());
+                markAsPrinted(order, "DELIVERY");
+
+                log.Info(
+                    string.Format(
+                        CultureInfo.InvariantCulture,
+                        "event=COOKING_START_PRINT_REQUESTED mode=DELIVERY orderId={0} orderNumber={1}",
+                        order.Id,
+                        order.Number));
+                return true;
+            }
+
+            if (!settings.PrintTableBillOnCookingStart)
+            {
+                log.Info(
+                    string.Format(
+                        CultureInfo.InvariantCulture,
+                        "event=COOKING_START_PRINT_SKIPPED reason=TABLE_DISABLED orderId={0} orderNumber={1}",
+                        order.Id,
+                        order.Number));
+                return false;
+            }
+
+            log.Info(
+                string.Format(
+                    CultureInfo.InvariantCulture,
+                    "event=COOKING_START_PRINT_STARTED mode=TABLE orderId={0} orderNumber={1}",
+                    order.Id,
+                    order.Number));
+
+            operations.PrintBillCheque(order, operations.GetDefaultCredentials(), PrinterSelectionMode.Default);
+            markAsPrinted(order, "TABLE");
+
+            log.Info(
+                string.Format(
+                    CultureInfo.InvariantCulture,
+                    "event=COOKING_START_PRINT_REQUESTED mode=TABLE orderId={0} orderNumber={1}",
+                    order.Id,
+                    order.Number));
+            return true;
+        }
+
+        private void markAsPrinted(IOrder order, string mode)
         {
             var value = string.Format(
                 CultureInfo.InvariantCulture,
@@ -168,10 +222,14 @@ namespace IikoFront.OrderQrPlugin.Printing
                 mode,
                 DateTimeOffset.Now);
 
-            operations.AddOrUpdateKitchenOrderExternalData(
-                kitchenOrder,
-                ExternalDataKey,
-                new ExternalDataItem(value, false));
+            var kitchenOrder = operations.TryGetKitchenOrderByOrder(order);
+            if (kitchenOrder != null)
+            {
+                operations.AddOrUpdateKitchenOrderExternalData(
+                    kitchenOrder,
+                    ExternalDataKey,
+                    new ExternalDataItem(value, false));
+            }
         }
 
         private sealed class ActionObserver<T> : IObserver<T>
