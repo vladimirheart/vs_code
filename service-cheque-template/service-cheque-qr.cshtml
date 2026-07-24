@@ -487,6 +487,7 @@
 {
     private const int PrinterQrCodePage = 866;
     private const bool UsePrinterTransportEncoding = true;
+    private const int MaxItemsPerQr = 4;
     private const int MaxQrPayloadUtf8Bytes = 900;
     private const string QrNewLine = "\r\n";
 
@@ -682,7 +683,9 @@
         foreach (var itemBlock in itemBlocks)
         {
             var itemBytes = GetUtf8BytesCount(QrNewLine + itemBlock);
-            if (currentChunk.Count > 0 && currentBytes + itemBytes > MaxQrPayloadUtf8Bytes)
+            var exceedsItemLimit = currentChunk.Count >= MaxItemsPerQr;
+            var exceedsByteLimit = currentChunk.Count > 0 && currentBytes + itemBytes > MaxQrPayloadUtf8Bytes;
+            if (exceedsItemLimit || exceedsByteLimit)
             {
                 chunks.Add(currentChunk);
                 currentChunk = new List<string>();
