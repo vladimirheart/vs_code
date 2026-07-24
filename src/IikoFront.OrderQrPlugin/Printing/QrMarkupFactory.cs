@@ -1,4 +1,5 @@
 using System;
+using System.Text;
 using System.Xml.Linq;
 using IikoFront.OrderQrPlugin.Configuration;
 using Resto.Front.Api.Data.Cheques;
@@ -9,11 +10,12 @@ namespace IikoFront.OrderQrPlugin.Printing
     {
         public ChequeExtensions Create(string payload, string attemptId, PluginSettings settings)
         {
+            var qrPayload = encodePayload(payload, settings);
             var qrElement = new XElement(
                 Tags.QRCode,
                 new XAttribute(Attributes.Size, normalizeSize(settings.QrSize)),
                 new XAttribute(Attributes.Correction, normalizeCorrection(settings.QrCorrection)),
-                payload);
+                qrPayload);
 
             var markup = new XElement(
                 Tags.Center,
@@ -72,6 +74,39 @@ namespace IikoFront.OrderQrPlugin.Printing
             }
 
             return AttributeValues.Low;
+        }
+
+        private static string encodePayload(string payload, PluginSettings settings)
+        {
+            if (string.IsNullOrEmpty(payload))
+            {
+                return string.Empty;
+            }
+
+            if (string.Equals(settings.QrPayloadEncodingMode, "Raw", StringComparison.OrdinalIgnoreCase))
+            {
+                return payload;
+            }
+
+            if (string.Equals(settings.QrPayloadEncodingMode, "Utf8ViaPrinterCodePage", StringComparison.OrdinalIgnoreCase))
+            {
+                var printerEncoding = resolvePrinterEncoding(settings.QrPayloadPrinterCodePage);
+                return printerEncoding.GetString(Encoding.UTF8.GetBytes(payload));
+            }
+
+            return payload;
+        }
+
+        private static Encoding resolvePrinterEncoding(int codePage)
+        {
+            try
+            {
+                return Encoding.GetEncoding(codePage);
+            }
+            catch (ArgumentException)
+            {
+                return Encoding.GetEncoding(866);
+            }
         }
     }
 }

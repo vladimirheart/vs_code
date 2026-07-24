@@ -20,6 +20,12 @@ namespace IikoFront.OrderQrPlugin.Configuration
         [DataMember(Name = "qrCorrection")]
         public string QrCorrection { get; set; } = "Low";
 
+        [DataMember(Name = "qrPayloadEncodingMode")]
+        public string QrPayloadEncodingMode { get; set; } = "Utf8ViaPrinterCodePage";
+
+        [DataMember(Name = "qrPayloadPrinterCodePage")]
+        public int QrPayloadPrinterCodePage { get; set; } = 866;
+
         [DataMember(Name = "treatAllZeroFoodValueAsMissing")]
         public bool TreatAllZeroFoodValueAsMissing { get; set; } = true;
 
@@ -72,10 +78,18 @@ namespace IikoFront.OrderQrPlugin.Configuration
             PayloadVersion = string.IsNullOrWhiteSpace(PayloadVersion) ? "IIKOQR1" : PayloadVersion.Trim();
             QrSize = string.IsNullOrWhiteSpace(QrSize) ? "Extralarge" : QrSize.Trim();
             QrCorrection = string.IsNullOrWhiteSpace(QrCorrection) ? "Low" : QrCorrection.Trim();
+            QrPayloadEncodingMode = string.IsNullOrWhiteSpace(QrPayloadEncodingMode)
+                ? "Utf8ViaPrinterCodePage"
+                : QrPayloadEncodingMode.Trim();
 
             if (MaxPayloadUtf8BytesWarning <= 0)
             {
                 MaxPayloadUtf8BytesWarning = 2500;
+            }
+
+            if (QrPayloadPrinterCodePage <= 0)
+            {
+                QrPayloadPrinterCodePage = 866;
             }
 
             if (CookingStartInitialDelayMs < 0)

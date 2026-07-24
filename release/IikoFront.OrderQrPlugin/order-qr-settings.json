@@ -4,6 +4,8 @@
   "payloadVersion": "IIKOQR1",
   "qrSize": "Extralarge",
   "qrCorrection": "Low",
+  "qrPayloadEncodingMode": "Utf8ViaPrinterCodePage",
+  "qrPayloadPrinterCodePage": 866,
   "treatAllZeroFoodValueAsMissing": true,
   "maxPayloadUtf8BytesWarning": 2500,
   "writeFullPayloadToStandardLog": false,

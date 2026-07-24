@@ -81,6 +81,8 @@ LicenseModuleId = 21016318
   "payloadVersion": "IIKOQR1",
   "qrSize": "Extralarge",
   "qrCorrection": "Low",
+  "qrPayloadEncodingMode": "Utf8ViaPrinterCodePage",
+  "qrPayloadPrinterCodePage": 866,
   "treatAllZeroFoodValueAsMissing": true,
   "maxPayloadUtf8BytesWarning": 2500,
   "writeFullPayloadToStandardLog": false,
@@ -101,11 +103,14 @@ LicenseModuleId = 21016318
 - `"printOnCookingStart": true` — включить автопечать на старте готовки.
 - `"printDeliveryBillOnCookingStart": true` — печатать доставочный документ при `CookingStarted`.
 - `"printTableBillOnCookingStart": true` — печатать гостевой счет заказа от стола при `CookingStarted`.
+- `"qrPayloadEncodingMode": "Utf8ViaPrinterCodePage"` — для принтеров с `cp866` сначала преобразовать payload в транспортную строку, чтобы в QR физически попали байты UTF-8.
+- `"qrPayloadPrinterCodePage": 866` — кодовая страница принтера, через которую идет упаковка QR payload.
 - `"cookingStartInitialDelayMs": 5000` — подождать 5 секунд перед первой попыткой печати, чтобы iiko успела отпустить блокировку заказа.
 - `"cookingStartRetryDelayMs": 2000` — ждать 2 секунды между повторными попытками.
 - `"cookingStartMaxAttempts": 30` — максимум 30 попыток автопечати на один старт готовки.
 
 Если файла нет, плагин создаёт его со значениями по умолчанию. Если JSON повреждён, плагин пишет ошибку в стандартный лог и использует безопасные дефолты.
+Если после сканирования вы видите текст вида `���� �ॢ�⪠`, это почти всегда означает, что принтер записал в QR байты `cp866`, а приложение-сканер попыталось прочитать их как `UTF-8`. Для такого случая и нужен режим `Utf8ViaPrinterCodePage`.
 Для заказов от стола это особенно важно: `PrintBillCheque(...)` меняет статус заказа на `Bill`, поэтому на живом событии `CookingStarted` заказ часто ещё занят внутренней edit-session iiko. Отложенная первая попытка и длинное окно ретраев нужны именно для обхода этой блокировки.
 
 ## Справочник параметров
@@ -133,6 +138,18 @@ LicenseModuleId = 21016318
   Допустимые значения: `Low`, `High`.
   Значение по умолчанию: `Low`.
   Если указано неизвестное значение, плагин использует `Low`.
+
+- `"qrPayloadEncodingMode"`:
+  Допустимые значения: `Utf8ViaPrinterCodePage`, `Raw`.
+  Значение по умолчанию: `Utf8ViaPrinterCodePage`.
+  `Utf8ViaPrinterCodePage` нужен для принтеров, которые строят QR из байтов своей локальной кодовой страницы, например `cp866`.
+  `Raw` оставляет payload без дополнительного преобразования.
+
+- `"qrPayloadPrinterCodePage"`:
+  Любое целое число `> 0`.
+  Значение по умолчанию: `866`.
+  Используется только вместе с `"qrPayloadEncodingMode": "Utf8ViaPrinterCodePage"`.
+  Для вашей текущей настройки принтера должно оставаться `866`.
 
 - `"treatAllZeroFoodValueAsMissing"`:
   `true` | `false`
@@ -213,6 +230,8 @@ LicenseModuleId = 21016318
   "payloadVersion": "IIKOQR1",
   "qrSize": "Extralarge",
   "qrCorrection": "Low",
+  "qrPayloadEncodingMode": "Utf8ViaPrinterCodePage",
+  "qrPayloadPrinterCodePage": 866,
   "treatAllZeroFoodValueAsMissing": true,
   "maxPayloadUtf8BytesWarning": 2500,
   "writeFullPayloadToStandardLog": false,
