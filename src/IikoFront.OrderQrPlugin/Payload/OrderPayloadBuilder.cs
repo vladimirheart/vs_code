@@ -28,16 +28,15 @@ namespace IikoFront.OrderQrPlugin.Payload
         {
             var fields = new List<string>
             {
-                $"ЗАКАЗ:{PayloadEscaper.EscapeOrDash(order.OrderNumber)}"
+                $"ЗАК:{PayloadEscaper.EscapeOrDash(order.OrderNumber)}"
             };
 
             if (settings.IncludePrintTime && order.PrintTime.HasValue)
             {
-                fields.Add($"ДАТА:{order.PrintTime.Value.ToString("yyyy-MM-ddTHH:mm:ss", CultureInfo.InvariantCulture)}");
+                fields.Add($"Д.:{order.PrintTime.Value.ToString("yyyy-MM-ddTHH:mm:ss", CultureInfo.InvariantCulture)}");
             }
 
-            fields.Add($"ПОВТОР:{order.RepeatBillNumber.ToString(CultureInfo.InvariantCulture)}");
-            fields.Add($"ПОЗИЦИЙ:{order.ActiveItemCount.ToString(CultureInfo.InvariantCulture)}");
+            fields.Add($"ПОЗ.:{order.ActiveItemCount.ToString(CultureInfo.InvariantCulture)}");
 
             if (settings.IncludeOrderGuidInPayload)
             {
@@ -51,10 +50,10 @@ namespace IikoFront.OrderQrPlugin.Payload
         {
             return new[]
             {
-                string.Join(
-                    FieldSeparator,
+                string.Concat(
                     item.SequenceNumber.ToString(CultureInfo.InvariantCulture),
-                    $"Н:{PayloadEscaper.EscapeOrDash(item.Name)}"),
+                    ";",
+                    PayloadEscaper.EscapeOrDash(item.Name)),
                 string.Join(
                     FieldSeparator,
                     $"КОЛ:{item.Quantity}",
@@ -65,7 +64,7 @@ namespace IikoFront.OrderQrPlugin.Payload
                     $"Б:{item.Nutrition.Protein}",
                     $"Ж:{item.Nutrition.Fat}",
                     $"У:{item.Nutrition.Carbohydrate}"),
-                $"АЛЛЕРГЕНЫ:{PayloadEscaper.EscapeOrDash(item.AllergensText)}"
+                $"АЛГ:{PayloadEscaper.EscapeOrDash(item.AllergensText)}"
             };
         }
 
@@ -73,14 +72,14 @@ namespace IikoFront.OrderQrPlugin.Payload
         {
             if (!settings.IncludeModifiers || item.Modifiers.Count == 0)
             {
-                return "МОДИФИКАТОРЫ:-";
+                return "МОД.:-";
             }
 
             var modifiers = item.Modifiers
                 .Select(modifier =>
                     $"{PayloadEscaper.EscapeOrDash(modifier.Name)}[КОЛ:{modifier.Quantity}; ККАЛ:{modifier.Nutrition.Caloricity}; Б:{modifier.Nutrition.Protein}; Ж:{modifier.Nutrition.Fat}; У:{modifier.Nutrition.Carbohydrate}]");
 
-            return "МОДИФИКАТОРЫ:" + string.Join("|", modifiers);
+            return "МОД.:" + string.Join("|", modifiers);
         }
     }
 }

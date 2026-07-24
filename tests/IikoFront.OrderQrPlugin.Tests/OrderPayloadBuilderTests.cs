@@ -36,11 +36,11 @@ namespace IikoFront.OrderQrPlugin.Tests
 
             var payload = builder.Build(order, settings);
 
-            Assert.IsTrue(payload.Contains("1; Н:-"));
+            Assert.IsTrue(payload.Contains("1;-"));
             Assert.IsTrue(payload.Contains("КОЛ:-; РАЗМЕР:-"));
             Assert.IsTrue(payload.Contains("ККАЛ:-; Б:-; Ж:-; У:-"));
-            Assert.IsTrue(payload.Contains("АЛЛЕРГЕНЫ:-"));
-            Assert.IsTrue(payload.Contains("МОДИФИКАТОРЫ:-"));
+            Assert.IsTrue(payload.Contains("АЛГ:-"));
+            Assert.IsTrue(payload.Contains("МОД.:-"));
         }
 
         [TestMethod]
@@ -139,7 +139,8 @@ namespace IikoFront.OrderQrPlugin.Tests
 
             var payload = builder.Build(order, settings);
 
-            StringAssert.Contains(payload, "1; Н:Test item\nКОЛ:1; РАЗМЕР:-\nККАЛ:161.8; Б:8.3; Ж:0.6; У:30.8\nАЛЛЕРГЕНЫ:-\nМОДИФИКАТОРЫ:-");
+            StringAssert.Contains(payload, "ЗАК:87; Д.:2026-07-24T11:21:28; ПОЗ.:1");
+            StringAssert.Contains(payload, "1;Test item\nКОЛ:1; РАЗМЕР:-\nККАЛ:161.8; Б:8.3; Ж:0.6; У:30.8\nАЛГ:-\nМОД.:-");
         }
 
         [TestMethod]
