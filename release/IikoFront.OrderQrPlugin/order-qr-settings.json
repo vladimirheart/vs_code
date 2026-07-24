@@ -14,5 +14,8 @@
   "includePrintTime": true,
   "printOnCookingStart": true,
   "printDeliveryBillOnCookingStart": true,
-  "printTableBillOnCookingStart": true
+  "printTableBillOnCookingStart": true,
+  "cookingStartInitialDelayMs": 5000,
+  "cookingStartRetryDelayMs": 2000,
+  "cookingStartMaxAttempts": 30
 }

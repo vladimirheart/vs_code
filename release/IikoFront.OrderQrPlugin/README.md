@@ -91,15 +91,22 @@ LicenseModuleId = 21016318
   "includePrintTime": true,
   "printOnCookingStart": true,
   "printDeliveryBillOnCookingStart": true,
-  "printTableBillOnCookingStart": true
+  "printTableBillOnCookingStart": true,
+  "cookingStartInitialDelayMs": 5000,
+  "cookingStartRetryDelayMs": 2000,
+  "cookingStartMaxAttempts": 30
 }
 ```
 
 - `"printOnCookingStart": true` — включить автопечать на старте готовки.
 - `"printDeliveryBillOnCookingStart": true` — печатать доставочный документ при `CookingStarted`.
 - `"printTableBillOnCookingStart": true` — печатать гостевой счет заказа от стола при `CookingStarted`.
+- `"cookingStartInitialDelayMs": 5000` — подождать 5 секунд перед первой попыткой печати, чтобы iiko успела отпустить блокировку заказа.
+- `"cookingStartRetryDelayMs": 2000` — ждать 2 секунды между повторными попытками.
+- `"cookingStartMaxAttempts": 30` — максимум 30 попыток автопечати на один старт готовки.
 
 Если файла нет, плагин создаёт его со значениями по умолчанию. Если JSON повреждён, плагин пишет ошибку в стандартный лог и использует безопасные дефолты.
+Для заказов от стола это особенно важно: `PrintBillCheque(...)` меняет статус заказа на `Bill`, поэтому на живом событии `CookingStarted` заказ часто ещё занят внутренней edit-session iiko. Отложенная первая попытка и длинное окно ретраев нужны именно для обхода этой блокировки.
 
 ## Справочник параметров
 
@@ -181,6 +188,22 @@ LicenseModuleId = 21016318
   Если `true`, для обычного заказа от стола на `CookingStarted` вызывается `PrintBillCheque(...)`.
   Если `false`, заказ от стола на старте готовки не печатается.
 
+- `"cookingStartInitialDelayMs"`:
+  Любое целое число `>= 0`.
+  Значение по умолчанию: `5000`.
+  Задержка перед первой попыткой автопечати после события `CookingStarted`.
+  Для столов, где часто встречается `EntityAlreadyInUseException`, имеет смысл увеличивать до `8000`-`15000`.
+
+- `"cookingStartRetryDelayMs"`:
+  Любое целое число `> 0`.
+  Значение по умолчанию: `2000`.
+  Пауза между повторными попытками, если iiko ещё держит блокировку заказа.
+
+- `"cookingStartMaxAttempts"`:
+  Любое целое число `> 0`.
+  Значение по умолчанию: `30`.
+  Сколько раз плагин максимум попробует автопечать одного и того же заказа до окончательного отказа.
+
 Рекомендуемый безопасный стартовый профиль:
 
 ```json
@@ -200,7 +223,10 @@ LicenseModuleId = 21016318
   "includePrintTime": true,
   "printOnCookingStart": true,
   "printDeliveryBillOnCookingStart": true,
-  "printTableBillOnCookingStart": true
+  "printTableBillOnCookingStart": true,
+  "cookingStartInitialDelayMs": 5000,
+  "cookingStartRetryDelayMs": 2000,
+  "cookingStartMaxAttempts": 30
 }
 ```
 

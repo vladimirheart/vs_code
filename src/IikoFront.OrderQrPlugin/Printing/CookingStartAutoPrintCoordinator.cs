@@ -16,8 +16,6 @@ namespace IikoFront.OrderQrPlugin.Printing
     public sealed class CookingStartAutoPrintCoordinator
     {
         private const string ExternalDataKey = "IikoFront.OrderQrPlugin.CookingStartPrinted";
-        private const int PrintRetryCount = 6;
-        private const int RetryDelayMs = 500;
 
         private readonly IOperationService operations;
         private readonly PluginSettings settings;
@@ -67,6 +65,15 @@ namespace IikoFront.OrderQrPlugin.Printing
                 return;
             }
 
+            log.Info(
+                string.Format(
+                    CultureInfo.InvariantCulture,
+                    "event=COOKING_START_PRINT_SCHEDULED orderId={0} initialDelayMs={1} retryDelayMs={2} maxAttempts={3}",
+                    kitchenOrderId,
+                    settings.CookingStartInitialDelayMs,
+                    settings.CookingStartRetryDelayMs,
+                    settings.CookingStartMaxAttempts));
+
             Task.Run(() => ProcessCookingStartPrintAsync(kitchenOrder.BaseOrderId));
         }
 
@@ -84,8 +91,21 @@ namespace IikoFront.OrderQrPlugin.Printing
         {
             try
             {
-                for (var attempt = 1; attempt <= PrintRetryCount; attempt++)
+                if (settings.CookingStartInitialDelayMs > 0)
                 {
+                    await Task.Delay(settings.CookingStartInitialDelayMs).ConfigureAwait(false);
+                }
+
+                for (var attempt = 1; attempt <= settings.CookingStartMaxAttempts; attempt++)
+                {
+                    log.Info(
+                        string.Format(
+                            CultureInfo.InvariantCulture,
+                            "event=COOKING_START_PRINT_ATTEMPT orderId={0} attempt={1} maxAttempts={2}",
+                            orderId,
+                            attempt,
+                            settings.CookingStartMaxAttempts));
+
                     try
                     {
                         if (TryPrint(orderId))
@@ -96,16 +116,18 @@ namespace IikoFront.OrderQrPlugin.Printing
                         inFlightOrPrinted.TryRemove(orderId, out _);
                         return;
                     }
-                    catch (EntityAlreadyInUseException) when (attempt < PrintRetryCount)
+                    catch (EntityAlreadyInUseException ex) when (attempt < settings.CookingStartMaxAttempts)
                     {
                         log.Warn(
                             string.Format(
                                 CultureInfo.InvariantCulture,
-                                "event=COOKING_START_PRINT_RETRY orderId={0} attempt={1} delayMs={2} reason=ENTITY_ALREADY_IN_USE",
+                                "event=COOKING_START_PRINT_RETRY orderId={0} attempt={1} delayMs={2} reason=ENTITY_ALREADY_IN_USE lockedTerminal={3} lockedUser={4}",
                                 orderId,
                                 attempt,
-                                RetryDelayMs));
-                        await Task.Delay(RetryDelayMs).ConfigureAwait(false);
+                                settings.CookingStartRetryDelayMs,
+                                normalizeLogValue(ex.LockedTerminalName),
+                                normalizeLogValue(ex.LockedUser?.Code)));
+                        await Task.Delay(settings.CookingStartRetryDelayMs).ConfigureAwait(false);
                     }
                     catch (Exception ex)
                     {
@@ -124,8 +146,9 @@ namespace IikoFront.OrderQrPlugin.Printing
                 log.Error(
                     string.Format(
                         CultureInfo.InvariantCulture,
-                        "event=COOKING_START_PRINT_FAILED orderId={0} reason=ENTITY_ALREADY_IN_USE_RETRY_LIMIT",
-                        orderId));
+                        "event=COOKING_START_PRINT_FAILED orderId={0} reason=ENTITY_ALREADY_IN_USE_RETRY_LIMIT maxAttempts={1}",
+                        orderId,
+                        settings.CookingStartMaxAttempts));
             }
             catch (Exception ex)
             {
@@ -222,14 +245,33 @@ namespace IikoFront.OrderQrPlugin.Printing
                 mode,
                 DateTimeOffset.Now);
 
-            var kitchenOrder = operations.TryGetKitchenOrderByOrder(order);
-            if (kitchenOrder != null)
+            try
             {
-                operations.AddOrUpdateKitchenOrderExternalData(
-                    kitchenOrder,
-                    ExternalDataKey,
-                    new ExternalDataItem(value, false));
+                var kitchenOrder = operations.TryGetKitchenOrderByOrder(order);
+                if (kitchenOrder != null)
+                {
+                    operations.AddOrUpdateKitchenOrderExternalData(
+                        kitchenOrder,
+                        ExternalDataKey,
+                        new ExternalDataItem(value, false));
+                }
             }
+            catch (Exception ex)
+            {
+                log.Warn(
+                    string.Format(
+                        CultureInfo.InvariantCulture,
+                        "event=COOKING_START_PRINT_MARK_FAILED orderId={0} mode={1} errorType={2} errorMessage={3}",
+                        order.Id,
+                        mode,
+                        ex.GetType().Name,
+                        normalizeLogValue(ex.Message)));
+            }
+        }
+
+        private static string normalizeLogValue(string value)
+        {
+            return string.IsNullOrWhiteSpace(value) ? "-" : value.Replace(' ', '_');
         }
 
         private sealed class ActionObserver<T> : IObserver<T>
