@@ -1,0 +1,32 @@
+@using System
+@using System.Linq
+@using System.Collections.Generic
+@*
+  Черновик шаблона сервисного чека iiko.
+
+  Важно:
+  1. Это отдельная заготовка под сервисный чек.
+  2. Имена Model.Order / Model.Items / item.Name / item.Amount нужно сверить с TemplateModels.xml вашей версии iiko.
+  3. Поля КБЖУ, аллергены и модификаторы здесь помечены как TODO, потому что доступность этих свойств зависит от модели печати.
+*@
+@{
+    var order = Model;
+    var rawItems = (IEnumerable<dynamic>)(Model.Items ?? Enumerable.Empty<dynamic>());
+    var items = rawItems.Where(item => item != null).ToList();
+    var printTime = DateTime.Now.ToString("yyyy-MM-ddTHH:mm:ss");
+    var lineNumber = 0;
+}
+ЗАК:@(order.Number); Д.:@(printTime); ПОЗ.:@(items.Count)
+@foreach (var item in items)
+{
+    lineNumber++;
+<text>
+@(lineNumber);@(item.Name)
+КОЛ:@(item.Amount)@if (item.Size != null) {<text>; РАЗМЕР:@(item.Size)</text>}
+ККАЛ:@("-"); Б:@("-"); Ж:@("-"); У:@("-")
+АЛГ:@("-")
+</text>
+    @* TODO: если в модели доступны модификаторы, печатать строку:
+       МОД.:modifier1|modifier2
+    *@
+}

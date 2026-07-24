@@ -26,6 +26,7 @@
 
 - `src/IikoFront.OrderQrPlugin` — основная библиотека плагина
 - `tests/IikoFront.OrderQrPlugin.Tests` — unit-тесты логики payload/escaping/КБЖУ
+- `service-cheque-template` — отдельный каталог под шаблон сервисного чека iiko
 
 ## Сборка
 
