@@ -6,6 +6,8 @@
 @using System.Globalization
 @using System.Reflection
 @functions {
+    private const int PrinterQrCodePage = 866;
+
     private static object GetPropertyValue(object source, params string[] names)
     {
         if (source == null || names == null)
@@ -84,6 +86,29 @@
         return ToText(value, fallback);
     }
 
+    private static Encoding ResolveEncoding(int codePage)
+    {
+        try
+        {
+            return Encoding.GetEncoding(codePage);
+        }
+        catch
+        {
+            return Encoding.GetEncoding(866);
+        }
+    }
+
+    private static string EncodeQrPayload(string payload)
+    {
+        if (string.IsNullOrEmpty(payload))
+        {
+            return string.Empty;
+        }
+
+        var printerEncoding = ResolveEncoding(PrinterQrCodePage);
+        return printerEncoding.GetString(Encoding.UTF8.GetBytes(payload));
+    }
+
     private static string JoinNames(IEnumerable<object> source)
     {
         var values = new List<string>();
@@ -108,10 +133,40 @@
         return ToCompactNumber(value, "-");
     }
 
-    private static string BuildPayload(object order)
+    private static object ResolveOrder(object model)
     {
+        return GetPropertyValue(model, "Order", "CurrentOrder", "Document", "SourceOrder") ?? model;
+    }
+
+    private static List<object> ResolveItems(object model, object order)
+    {
+        return AsObjects(
+                GetPropertyValue(
+                    order,
+                    "Items",
+                    "OrderItems",
+                    "Products",
+                    "ProductItems",
+                    "Lines",
+                    "Entries",
+                    "GuestItems")
+                ?? GetPropertyValue(
+                    model,
+                    "Items",
+                    "OrderItems",
+                    "Products",
+                    "ProductItems",
+                    "Lines",
+                    "Entries",
+                    "GuestItems"))
+            .ToList();
+    }
+
+    private static string BuildPayload(object model)
+    {
+        var order = ResolveOrder(model);
         var orderNumber = ToText(GetPropertyValue(order, "Number", "OrderNumber"), "-");
-        var items = AsObjects(GetPropertyValue(order, "Items", "OrderItems", "Products", "ProductItems")).ToList();
+        var items = ResolveItems(model, order);
         var builder = new StringBuilder();
 
         builder.Append("ЗАК:")
@@ -171,7 +226,7 @@
     }
 }
 @{
-    var payload = BuildPayload(Model);
+    var payload = EncodeQrPayload(BuildPayload(Model));
 }
 <doc>
   <qrcode>@payload</qrcode>
