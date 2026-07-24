@@ -8,6 +8,8 @@ namespace IikoFront.OrderQrPlugin.Payload
 {
     public sealed class OrderPayloadBuilder
     {
+        private const string FieldSeparator = "; ";
+
         public string Build(OrderQrModel order, PluginSettings settings)
         {
             var lines = new List<string> { settings.PayloadVersion };
@@ -15,7 +17,7 @@ namespace IikoFront.OrderQrPlugin.Payload
 
             foreach (var item in order.Items)
             {
-                lines.Add(buildItemLine(item));
+                lines.AddRange(buildItemLines(item));
                 lines.Add(buildModifiersLine(item, settings));
             }
 
@@ -26,52 +28,59 @@ namespace IikoFront.OrderQrPlugin.Payload
         {
             var fields = new List<string>
             {
-                $"O:{PayloadEscaper.EscapeOrDash(order.OrderNumber)}"
+                $"ЗАКАЗ:{PayloadEscaper.EscapeOrDash(order.OrderNumber)}"
             };
 
             if (settings.IncludePrintTime && order.PrintTime.HasValue)
             {
-                fields.Add($"D:{order.PrintTime.Value.ToString("yyyy-MM-ddTHH:mm:ss", CultureInfo.InvariantCulture)}");
+                fields.Add($"ДАТА:{order.PrintTime.Value.ToString("yyyy-MM-ddTHH:mm:ss", CultureInfo.InvariantCulture)}");
             }
 
-            fields.Add($"R:{order.RepeatBillNumber.ToString(CultureInfo.InvariantCulture)}");
-            fields.Add($"C:{order.ActiveItemCount.ToString(CultureInfo.InvariantCulture)}");
+            fields.Add($"ПОВТОР:{order.RepeatBillNumber.ToString(CultureInfo.InvariantCulture)}");
+            fields.Add($"ПОЗИЦИЙ:{order.ActiveItemCount.ToString(CultureInfo.InvariantCulture)}");
 
             if (settings.IncludeOrderGuidInPayload)
             {
-                fields.Add($"G:{order.OrderId:D}");
+                fields.Add($"GUID:{order.OrderId:D}");
             }
 
-            return string.Join(";", fields);
+            return string.Join(FieldSeparator, fields);
         }
 
-        private static string buildItemLine(OrderItemQrModel item)
+        private static IReadOnlyList<string> buildItemLines(OrderItemQrModel item)
         {
-            return string.Join(
-                ";",
-                item.SequenceNumber.ToString(CultureInfo.InvariantCulture),
-                $"N:{PayloadEscaper.EscapeOrDash(item.Name)}",
-                $"Q:{item.Quantity}",
-                $"S:{PayloadEscaper.EscapeOrDash(item.Size)}",
-                $"K:{item.Nutrition.Caloricity}",
-                $"B:{item.Nutrition.Protein}",
-                $"J:{item.Nutrition.Fat}",
-                $"U:{item.Nutrition.Carbohydrate}",
-                $"A:{PayloadEscaper.EscapeOrDash(item.AllergensText)}");
+            return new[]
+            {
+                string.Join(
+                    FieldSeparator,
+                    item.SequenceNumber.ToString(CultureInfo.InvariantCulture),
+                    $"Н:{PayloadEscaper.EscapeOrDash(item.Name)}"),
+                string.Join(
+                    FieldSeparator,
+                    $"КОЛ:{item.Quantity}",
+                    $"РАЗМЕР:{PayloadEscaper.EscapeOrDash(item.Size)}"),
+                string.Join(
+                    FieldSeparator,
+                    $"ККАЛ:{item.Nutrition.Caloricity}",
+                    $"Б:{item.Nutrition.Protein}",
+                    $"Ж:{item.Nutrition.Fat}",
+                    $"У:{item.Nutrition.Carbohydrate}"),
+                $"АЛЛЕРГЕНЫ:{PayloadEscaper.EscapeOrDash(item.AllergensText)}"
+            };
         }
 
         private static string buildModifiersLine(OrderItemQrModel item, PluginSettings settings)
         {
             if (!settings.IncludeModifiers || item.Modifiers.Count == 0)
             {
-                return "M:-";
+                return "МОДИФИКАТОРЫ:-";
             }
 
             var modifiers = item.Modifiers
                 .Select(modifier =>
-                    $"{PayloadEscaper.EscapeOrDash(modifier.Name)}[Q:{modifier.Quantity};K:{modifier.Nutrition.Caloricity};B:{modifier.Nutrition.Protein};J:{modifier.Nutrition.Fat};U:{modifier.Nutrition.Carbohydrate}]");
+                    $"{PayloadEscaper.EscapeOrDash(modifier.Name)}[КОЛ:{modifier.Quantity}; ККАЛ:{modifier.Nutrition.Caloricity}; Б:{modifier.Nutrition.Protein}; Ж:{modifier.Nutrition.Fat}; У:{modifier.Nutrition.Carbohydrate}]");
 
-            return "M:" + string.Join("|", modifiers);
+            return "МОДИФИКАТОРЫ:" + string.Join("|", modifiers);
         }
     }
 }

@@ -1,7 +1,6 @@
 using System;
 using System.Collections.Concurrent;
 using System.Globalization;
-using System.Threading;
 using System.Threading.Tasks;
 using IikoFront.OrderQrPlugin.Configuration;
 using Resto.Front.Api;
@@ -16,6 +15,7 @@ namespace IikoFront.OrderQrPlugin.Printing
     public sealed class CookingStartAutoPrintCoordinator
     {
         private const string ExternalDataKey = "IikoFront.OrderQrPlugin.CookingStartPrinted";
+        private const int TableRetryDelayUpperBoundMs = 250;
 
         private readonly IOperationService operations;
         private readonly PluginSettings settings;
@@ -91,20 +91,23 @@ namespace IikoFront.OrderQrPlugin.Printing
         {
             try
             {
+                var retryPlan = resolveRetryPlan(orderId);
+
                 if (settings.CookingStartInitialDelayMs > 0)
                 {
                     await Task.Delay(settings.CookingStartInitialDelayMs).ConfigureAwait(false);
                 }
 
-                for (var attempt = 1; attempt <= settings.CookingStartMaxAttempts; attempt++)
+                for (var attempt = 1; attempt <= retryPlan.MaxAttempts; attempt++)
                 {
                     log.Info(
                         string.Format(
                             CultureInfo.InvariantCulture,
-                            "event=COOKING_START_PRINT_ATTEMPT orderId={0} attempt={1} maxAttempts={2}",
+                            "event=COOKING_START_PRINT_ATTEMPT orderId={0} attempt={1} maxAttempts={2} retryDelayMs={3}",
                             orderId,
                             attempt,
-                            settings.CookingStartMaxAttempts));
+                            retryPlan.MaxAttempts,
+                            retryPlan.RetryDelayMs));
 
                     try
                     {
@@ -116,7 +119,7 @@ namespace IikoFront.OrderQrPlugin.Printing
                         inFlightOrPrinted.TryRemove(orderId, out _);
                         return;
                     }
-                    catch (EntityAlreadyInUseException ex) when (attempt < settings.CookingStartMaxAttempts)
+                    catch (EntityAlreadyInUseException ex) when (attempt < retryPlan.MaxAttempts)
                     {
                         log.Warn(
                             string.Format(
@@ -124,10 +127,10 @@ namespace IikoFront.OrderQrPlugin.Printing
                                 "event=COOKING_START_PRINT_RETRY orderId={0} attempt={1} delayMs={2} reason=ENTITY_ALREADY_IN_USE lockedTerminal={3} lockedUser={4}",
                                 orderId,
                                 attempt,
-                                settings.CookingStartRetryDelayMs,
+                                retryPlan.RetryDelayMs,
                                 normalizeLogValue(ex.LockedTerminalName),
                                 normalizeLogValue(ex.LockedUser?.Code)));
-                        await Task.Delay(settings.CookingStartRetryDelayMs).ConfigureAwait(false);
+                        await Task.Delay(retryPlan.RetryDelayMs).ConfigureAwait(false);
                     }
                     catch (Exception ex)
                     {
@@ -146,9 +149,10 @@ namespace IikoFront.OrderQrPlugin.Printing
                 log.Error(
                     string.Format(
                         CultureInfo.InvariantCulture,
-                        "event=COOKING_START_PRINT_FAILED orderId={0} reason=ENTITY_ALREADY_IN_USE_RETRY_LIMIT maxAttempts={1}",
+                        "event=COOKING_START_PRINT_FAILED orderId={0} reason=ENTITY_ALREADY_IN_USE_RETRY_LIMIT maxAttempts={1} retryDelayMs={2}",
                         orderId,
-                        settings.CookingStartMaxAttempts));
+                        retryPlan.MaxAttempts,
+                        retryPlan.RetryDelayMs));
             }
             catch (Exception ex)
             {
@@ -324,6 +328,42 @@ namespace IikoFront.OrderQrPlugin.Printing
             return !string.IsNullOrWhiteSpace(message)
                 && (message.IndexOf("Closed", StringComparison.OrdinalIgnoreCase) >= 0
                     || message.IndexOf("закрыт", StringComparison.OrdinalIgnoreCase) >= 0);
+        }
+
+        private RetryPlan resolveRetryPlan(Guid orderId)
+        {
+            var order = operations.GetOrderById(orderId);
+            if (order is IDeliveryOrder)
+            {
+                return new RetryPlan(settings.CookingStartRetryDelayMs, settings.CookingStartMaxAttempts);
+            }
+
+            var retryDelayMs = Math.Min(settings.CookingStartRetryDelayMs, TableRetryDelayUpperBoundMs);
+            retryDelayMs = Math.Max(retryDelayMs, 1);
+
+            if (retryDelayMs >= settings.CookingStartRetryDelayMs)
+            {
+                return new RetryPlan(settings.CookingStartRetryDelayMs, settings.CookingStartMaxAttempts);
+            }
+
+            var originalRetryBudgetMs = Math.Max(settings.CookingStartMaxAttempts - 1, 0) * settings.CookingStartRetryDelayMs;
+            var scaledAttempts = (originalRetryBudgetMs / retryDelayMs) + 1;
+            var maxAttempts = Math.Max(settings.CookingStartMaxAttempts, scaledAttempts);
+
+            return new RetryPlan(retryDelayMs, maxAttempts);
+        }
+
+        private sealed class RetryPlan
+        {
+            public RetryPlan(int retryDelayMs, int maxAttempts)
+            {
+                RetryDelayMs = retryDelayMs;
+                MaxAttempts = maxAttempts;
+            }
+
+            public int RetryDelayMs { get; }
+
+            public int MaxAttempts { get; }
         }
 
         private sealed class ActionObserver<T> : IObserver<T>

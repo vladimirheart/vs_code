@@ -36,8 +36,11 @@ namespace IikoFront.OrderQrPlugin.Tests
 
             var payload = builder.Build(order, settings);
 
-            Assert.IsTrue(payload.Contains("1;N:-;Q:-;S:-;K:-;B:-;J:-;U:-;A:-"));
-            Assert.IsTrue(payload.Contains("M:-"));
+            Assert.IsTrue(payload.Contains("1; Н:-"));
+            Assert.IsTrue(payload.Contains("КОЛ:-; РАЗМЕР:-"));
+            Assert.IsTrue(payload.Contains("ККАЛ:-; Б:-; Ж:-; У:-"));
+            Assert.IsTrue(payload.Contains("АЛЛЕРГЕНЫ:-"));
+            Assert.IsTrue(payload.Contains("МОДИФИКАТОРЫ:-"));
         }
 
         [TestMethod]
@@ -101,6 +104,42 @@ namespace IikoFront.OrderQrPlugin.Tests
 
             Assert.IsTrue(payload.Contains("Позиция 1"));
             Assert.IsTrue(payload.Contains("Позиция 100"));
+        }
+
+        [TestMethod]
+        public void Build_SplitsItemNameAndNutritionIntoSeparateLines()
+        {
+            var builder = new OrderPayloadBuilder();
+            var settings = new PluginSettings();
+            var order = new OrderQrModel
+            {
+                OrderId = Guid.NewGuid(),
+                OrderNumber = "87",
+                PrintTime = new DateTime(2026, 7, 24, 11, 21, 28),
+                RepeatBillNumber = 0,
+                ActiveItemCount = 1
+            };
+
+            order.Items.Add(new OrderItemQrModel
+            {
+                SequenceNumber = 1,
+                Name = "Test item",
+                Quantity = "1",
+                Size = "-",
+                Nutrition = new NutritionQrModel
+                {
+                    Status = FoodValueStatuses.Available,
+                    Caloricity = "161.8",
+                    Protein = "8.3",
+                    Fat = "0.6",
+                    Carbohydrate = "30.8"
+                },
+                AllergensText = "-"
+            });
+
+            var payload = builder.Build(order, settings);
+
+            StringAssert.Contains(payload, "1; Н:Test item\nКОЛ:1; РАЗМЕР:-\nККАЛ:161.8; Б:8.3; Ж:0.6; У:30.8\nАЛЛЕРГЕНЫ:-\nМОДИФИКАТОРЫ:-");
         }
 
         [TestMethod]
